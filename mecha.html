@@ -1,0 +1,2020 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>曙光号 · 破晓之战 — 60s 宇宙空战</title>
+<style>
+  :root{
+    --bg:#03050c; --panel:#0a0f1d; --panel2:#0e1526; --line:#1c2a4a;
+    --ink:#dfe8f6; --ink-dim:#7d8db0; --cyan:#7fe3ff; --blue:#2e63e7;
+    --deep:#16295e; --red:#ff2b45; --gold:#f5c542; --ok:#3ddc97;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:var(--bg);overflow:hidden}
+  body{
+    font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+    color:var(--ink); display:flex; flex-direction:column;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:var(--panel)}
+  ::-webkit-scrollbar-thumb{background:linear-gradient(180deg,var(--blue),var(--deep));border-radius:5px;border:2px solid var(--panel)}
+  ::-webkit-scrollbar-thumb:hover{background:var(--cyan)}
+
+  #stage-wrap{
+    position:relative; flex:1 1 auto; min-height:0;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(120% 90% at 50% 40%, #071021 0%, #03050c 70%);
+  }
+  #frame{position:relative; line-height:0; box-shadow:0 0 90px rgba(46,99,231,.16), 0 0 24px rgba(0,0,0,.9);}
+  #stage{display:block; background:#000;}
+  /* ---- HUD ---- */
+  .hud{position:absolute; line-height:1.35; pointer-events:none; z-index:5;}
+  #hud-title{top:26px; left:34px;}
+  #hud-title .logo{
+    font-size:25px; font-weight:800; letter-spacing:.34em; color:var(--ink);
+    text-shadow:0 0 18px rgba(127,227,255,.55);
+  }
+  #hud-title .logo b{color:var(--cyan)}
+  #hud-title .sub{font-size:10px; letter-spacing:.52em; color:var(--ink-dim); margin-top:5px;}
+  #hud-act{
+    top:86px; left:34px; display:flex; align-items:center; gap:10px;
+    font-size:13px; letter-spacing:.22em;
+  }
+  #hud-act .chip{
+    padding:4px 12px; border:1px solid rgba(127,227,255,.45); color:var(--cyan);
+    background:rgba(10,18,38,.55); backdrop-filter:blur(3px);
+    clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%);
+    font-weight:700;
+  }
+  #hud-act .en{color:var(--ink-dim); font-size:10px; letter-spacing:.4em;}
+  #hud-tc{top:28px; right:34px; text-align:right;}
+  #hud-tc .tc{font-family:"Consolas","SF Mono",monospace; font-size:21px; color:var(--ink); letter-spacing:.12em; text-shadow:0 0 12px rgba(127,227,255,.35);}
+  #hud-tc .meta{font-size:10px; color:var(--ink-dim); letter-spacing:.3em; margin-top:4px;}
+  #hud-tc .meta em{font-style:normal;color:var(--ok)}
+  .corner{position:absolute;width:26px;height:26px;border:2px solid rgba(127,227,255,.4);z-index:4;pointer-events:none}
+  .corner.tl{top:16px;left:16px;border-right:none;border-bottom:none}
+  .corner.tr{top:16px;right:16px;border-left:none;border-bottom:none}
+  .corner.bl{bottom:16px;left:16px;border-right:none;border-top:none}
+  .corner.br{bottom:16px;right:16px;border-left:none;border-top:none}
+  /* ---- 字幕 / 必杀卡 / 定格标题 ---- */
+  #subtitle{
+    position:absolute; left:50%; bottom:64px; transform:translateX(-50%);
+    font-size:22px; letter-spacing:.18em; color:var(--ink); white-space:nowrap;
+    text-shadow:0 0 14px rgba(0,0,0,.95), 0 2px 6px rgba(0,0,0,.85);
+    padding:6px 26px; opacity:0; z-index:6; pointer-events:none;
+    background:linear-gradient(90deg,transparent,rgba(4,8,18,.72) 18%,rgba(4,8,18,.72) 82%,transparent);
+  }
+  #fin-card{
+    position:absolute; top:110px; right:120px; z-index:7; pointer-events:none; opacity:0;
+    display:flex; gap:16px; align-items:flex-start; transform-origin:100% 0;
+  }
+  #fin-card .ja{
+    writing-mode:vertical-rl; font-size:92px; font-weight:900; letter-spacing:.1em; color:#fff;
+    text-shadow:0 0 30px rgba(127,227,255,.95), 0 0 8px rgba(127,227,255,.8);
+  }
+  #fin-card .rule{width:3px; align-self:stretch; background:linear-gradient(180deg,var(--cyan),transparent);}
+  #fin-card .zh{writing-mode:vertical-rl; font-size:19px; letter-spacing:.3em; color:var(--cyan); margin-top:6px;}
+  #title-card{position:absolute; left:0; right:0; top:140px; text-align:center; z-index:7; pointer-events:none; opacity:0;}
+  #title-card .zh{font-size:86px; font-weight:900; letter-spacing:.3em; color:var(--ink); text-shadow:0 0 34px rgba(127,227,255,.65);}
+  #title-card .en{margin-top:10px; font-size:16px; letter-spacing:.72em; color:var(--cyan);}
+  #title-card .sub{margin-top:14px; font-size:11px; letter-spacing:.5em; color:var(--ink-dim);}
+  #hud-snd{
+    top:76px; right:34px; width:34px; height:34px; z-index:8; pointer-events:auto;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    background:rgba(10,18,38,.55); border:1px solid rgba(127,227,255,.4); border-radius:8px;
+    color:var(--cyan); backdrop-filter:blur(3px); transition:all .15s;
+  }
+  #hud-snd:hover{border-color:var(--cyan); box-shadow:0 0 12px rgba(127,227,255,.3);}
+  #hud-snd svg{width:16px;height:16px;fill:currentColor}
+  #hud-snd.on{color:var(--red); border-color:rgba(255,43,69,.5);}
+  #veil{
+    position:absolute; inset:0; z-index:20; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:18px;
+    background:var(--bg); transition:opacity .8s ease; line-height:1.6;
+  }
+  #veil.gone{opacity:0; pointer-events:none}
+  #veil .ring{
+    width:54px;height:54px;border-radius:50%;
+    border:2px solid var(--line); border-top-color:var(--cyan);
+    animation:spin 1s linear infinite;
+  }
+  #veil .txt{font-size:12px;letter-spacing:.5em;color:var(--ink-dim)}
+  #veil .err{max-width:520px;text-align:center;color:var(--red);font-size:14px;display:none;padding:0 20px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---- 控制条 ---- */
+  #controls{
+    flex:0 0 auto; display:flex; align-items:center; gap:16px;
+    padding:12px 22px 14px; background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border-top:1px solid var(--line); user-select:none; z-index:10;
+  }
+  .btn{
+    width:42px;height:42px; flex:0 0 auto; display:flex;align-items:center;justify-content:center;
+    background:rgba(46,99,231,.12); border:1px solid var(--line); border-radius:9px;
+    color:var(--ink); cursor:pointer; transition:all .18s ease; position:relative;
+  }
+  .btn:hover{border-color:var(--cyan); color:var(--cyan); background:rgba(127,227,255,.1); box-shadow:0 0 14px rgba(127,227,255,.25)}
+  .btn:active{transform:scale(.93)}
+  .btn svg{width:18px;height:18px;fill:currentColor}
+  .btn.on{border-color:var(--red); color:var(--red); background:rgba(255,43,69,.12); box-shadow:0 0 14px rgba(255,43,69,.3)}
+  .btn .tip{
+    position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%);
+    background:#060a16; border:1px solid var(--line); color:var(--ink-dim);
+    font-size:10px; letter-spacing:.15em; padding:4px 8px; border-radius:5px;
+    white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .15s;
+  }
+  .btn:hover .tip{opacity:1}
+  #btn-play{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,rgba(46,99,231,.35),rgba(127,227,255,.16));border-color:rgba(127,227,255,.5)}
+  #btn-play svg{width:22px;height:22px}
+
+  #track-zone{flex:1 1 auto; display:flex; flex-direction:column; gap:6px; min-width:0;}
+  #track{
+    position:relative; height:22px; cursor:pointer; touch-action:none;
+    display:flex; align-items:center;
+  }
+  #track .rail{
+    position:absolute; left:0; right:0; height:6px; border-radius:3px;
+    background:#101a33; border:1px solid #1a2745; overflow:hidden;
+  }
+  #track .fill{
+    position:absolute; left:0; top:0; bottom:0; width:0%;
+    background:linear-gradient(90deg,var(--deep),var(--blue) 55%,var(--cyan));
+    box-shadow:0 0 12px rgba(127,227,255,.5);
+  }
+  #track .tick{position:absolute; top:-3px; width:2px; height:12px; background:rgba(223,232,246,.35); z-index:2;}
+  #track .thumb{
+    position:absolute; top:50%; left:0%; width:15px; height:15px; z-index:3;
+    transform:translate(-50%,-50%) rotate(45deg);
+    background:var(--cyan); border:2px solid #eafcff;
+    box-shadow:0 0 14px rgba(127,227,255,.9); transition:width .12s,height .12s;
+  }
+  #track:hover .thumb{width:18px;height:18px}
+  #track-labels{display:flex; justify-content:space-between; font-size:10px; color:var(--ink-dim); letter-spacing:.18em;}
+  #track-labels .acts{display:flex; gap:14px; overflow:hidden;}
+  #track-labels .acts span{cursor:pointer; transition:color .15s; white-space:nowrap;}
+  #track-labels .acts span:hover{color:var(--cyan)}
+  #track-labels .acts span.cur{color:var(--cyan); text-shadow:0 0 8px rgba(127,227,255,.6)}
+  #tc-read{font-family:"Consolas",monospace; font-size:13px; color:var(--ink); letter-spacing:.1em; flex:0 0 auto;}
+  #tc-read small{color:var(--ink-dim)}
+  #kbd-hint{font-size:10px;color:#43537a;letter-spacing:.12em;flex:0 0 auto;white-space:nowrap}
+  @media (max-width:900px){ #kbd-hint{display:none} #hud-title .logo{font-size:18px} #track-labels > span:last-child{display:none} #track-labels .acts{gap:9px} #controls{gap:10px;padding:10px 12px} }
+</style>
+</head>
+<body>
+  <div id="stage-wrap">
+    <div id="frame">
+      <canvas id="stage" width="1920" height="1080"></canvas>
+      <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+      <div class="hud" id="hud-title">
+        <div class="logo">曙<b>光</b>号</div>
+        <div class="sub">DAWN BREAKER · ORBITAL ENGAGEMENT</div>
+      </div>
+      <div class="hud" id="hud-act"><span class="chip" id="act-chip">幕一 · 突围被围</span><span class="en" id="act-en">ENCIRCLED</span></div>
+      <div class="hud" id="hud-tc">
+        <div class="tc" id="tc">00:00:00</div>
+        <div class="meta">1920×1080 · <em id="fps">60</em> FPS</div>
+      </div>
+      <div class="hud" id="subtitle"></div>
+      <button class="hud" id="hud-snd" aria-label="声音 开/关">
+        <svg id="ic-snd2" viewBox="0 0 24 24"><path d="M3 9v6h4l6 5V4L7 9H3z"/><path d="M16 8a5 5 0 0 1 0 8" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        <svg id="ic-mut2" viewBox="0 0 24 24" style="display:none"><path d="M3 9v6h4l6 5V4L7 9H3z"/><path d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      </button>
+      <div class="hud" id="fin-card"><div class="ja" id="fin-ja"></div><div class="rule"></div><div class="zh" id="fin-zh"></div></div>
+      <div class="hud" id="title-card"><div class="zh" id="title-zh"></div><div class="en" id="title-en"></div><div class="sub" id="title-sub"></div></div>
+      <div id="veil">
+        <div class="ring"></div>
+        <div class="txt">引擎点火中</div>
+        <div class="err" id="veil-err"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button class="btn" id="btn-play" aria-label="播放/暂停">
+      <svg id="ic-play" viewBox="0 0 24 24"><path d="M7 4l14 8-14 8z"/></svg>
+      <svg id="ic-pause" viewBox="0 0 24 24" style="display:none"><path d="M5 4h5v16H5zM14 4h5v16h-5z"/></svg>
+      <span class="tip">播放 / 暂停（空格）</span>
+    </button>
+    <button class="btn" id="btn-replay" aria-label="重播">
+      <svg viewBox="0 0 24 24"><path d="M12 5V1L6 7l6 6V9a7 7 0 1 1-7 7H3a9 9 0 1 0 9-11z"/></svg>
+      <span class="tip">重播（R）</span>
+    </button>
+    <button class="btn" id="btn-rev" aria-label="倒放">
+      <svg viewBox="0 0 24 24"><path d="M17 4L3 12l14 8zM21 4v16h-2V4z" transform="scale(-1,1) translate(-24,0)"/></svg>
+      <span class="tip">倒放（V）</span>
+    </button>
+    <button class="btn" id="btn-mute" aria-label="声音开关">
+      <svg id="ic-snd" viewBox="0 0 24 24"><path d="M3 9v6h4l6 5V4L7 9H3z"/><path d="M16 8a5 5 0 0 1 0 8" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      <svg id="ic-mut" viewBox="0 0 24 24" style="display:none"><path d="M3 9v6h4l6 5V4L7 9H3z"/><path d="M16 9l6 6M22 9l-6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      <span class="tip">声音 开/关（M）</span>
+    </button>
+    <div id="track-zone">
+      <div id="track">
+        <div class="rail"><div class="fill" id="fill"></div></div>
+        <div class="thumb" id="thumb"></div>
+      </div>
+      <div id="track-labels">
+        <div class="acts" id="act-labels"></div>
+        <span>拖动跳转 · 任意位置可逆放</span>
+      </div>
+    </div>
+    <div id="tc-read"><span id="tc-cur">00:00.0</span><small> / 01:00.0</small></div>
+    <div id="kbd-hint">空格 播放 · R 重播 · V 倒放 · ←/→ ±2s · M 静音</div>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+'use strict';
+/* =====================================================================
+   曙光号 · 破晓之战 —— 单文件 60s 宇宙空战
+   架构铁律：一切画面状态 = 主时间轴时间 t 的纯函数（可拖动 / 可倒放）
+   ===================================================================== */
+
+/* ---------------- 顶部集中配置 ---------------- */
+const CONFIG = {
+  seed: 20261111,
+  width: 1920, height: 1080, fps: 60, duration: 60,
+
+  colors: {
+    heroWhite: 0xc3cddc, heroSilver: 0x8494a9, heroBlue: 0x2e63e7,
+    heroDeep: 0x16295e, heroGlow: 0x7fe3ff, heroGold: 0xf5c542,
+    enemyHull: 0x12151d, enemyArmor: 0x232a38, enemyRed: 0xff2b45, enemyGlow: 0xff5a3c,
+    motherHull: 0x272e3d, motherPlate: 0x39415a, motherRed: 0xff3348, motherCore: 0xffa04c,
+    sun: 0xfff2d0, sunCore: 0xffffff,
+    earthOcean: 0x14337e, earthLand: 0x2e6b40, earthIce: 0xdfe9f2,
+    nebulaA: 0x101c4e, nebulaB: 0x4a1e66, nebulaC: 0x0b4a56,
+    rock: 0x4c453d, rockDark: 0x3a342e,
+    trailHero: 0x6fd8ff, trailEnemy: 0xff4a3c, trailMother: 0xff6a3c,
+    starTints: [0xcfe2ff, 0xffffff, 0xffe6c4, 0xaec8ff]
+  },
+
+  /* 五幕起止（秒）——每一幕独立函数挂载到主时间轴 */
+  acts: [
+    { id: 1, fn: 'act1', name: '幕一 · 突围被围', en: 'ENCIRCLED',     start: 0,  end: 12 },
+    { id: 2, fn: 'act2', name: '幕二 · 反击破阵', en: 'COUNTERSTRIKE', start: 12, end: 26 },
+    { id: 3, fn: 'act3', name: '幕三 · 母舰对决', en: 'DREADNOUGHT',   start: 26, end: 42 },
+    { id: 4, fn: 'act4', name: '幕四 · 必杀一击', en: 'FINISHER',      start: 42, end: 54 },
+    { id: 5, fn: 'act5', name: '幕五 · 定格',     en: 'FREEZE FRAME',  start: 54, end: 60 }
+  ],
+
+  /* 镜头参数：阶段一为资产巡礼镜头，后续阶段按幕替换 */
+  camera: {
+    near: 0.5, far: 24000, shakeBase: 0.22,
+    shots: [
+      { t0: 0,  t1: 4,  from: { pos: [170, 70, 240], look: [0, 10, -60], fov: 55 }, to: { pos: [110, 34, 170], look: [0, 8, -40], fov: 49 }, ease: 'sine', shake: 0.35, track: 'mid' },
+      { t0: 4,  t1: 8,  from: { pos: [26, 12, 64],   look: [0, 9, 0],    fov: 46 }, to: { pos: [-18, 16, 58],  look: [0, 9, 0],   fov: 44 }, ease: 'sine', shake: 0.2,  track: 'hero' },
+      { t0: 8,  t1: 12, from: { pos: [-70, 16, 10],  look: [12, 10, -20], fov: 50 }, to: { pos: [-58, 13, 4],  look: [12, 10, -20], fov: 46 }, ease: 'power', shake: 0.45, track: 'mid' },
+      { t0: 12, t1: 16, from: { pos: [-40, 10, 52],  look: [0, 9, -20],  fov: 46 }, to: { pos: [-64, 16, 40],  look: [0, 9, -20], fov: 42 }, ease: 'sine', shake: 0.3,  track: 'hero' },
+      { t0: 16, t1: 20, from: { pos: [90, 30, -60],  look: [50, 8, -40], fov: 50 }, to: { pos: [120, 20, -90], look: [50, 8, -40], fov: 46 }, ease: 'power', shake: 0.5, track: 'foe' },
+      { t0: 20, t1: 23, from: { pos: [6, 18, -14],  look: [34, 12, -52], fov: 44 }, to: { pos: [-4, 16, -6], look: [34, 12, -52], fov: 40 }, ease: 'sine', shake: 0.4, track: 'hero' },
+      { t0: 23, t1: 26, from: { pos: [-60, 26, 120], look: [0, 10, -20], fov: 52 }, to: { pos: [-110, 44, 180], look: [0, 10, -20], fov: 56 }, ease: 'sine', shake: 0.25, track: 'hero' },
+      { t0: 26, t1: 32, from: { pos: [80, 40, 160], look: [0, 20, -100], fov: 55 }, to: { pos: [40, 26, 100], look: [0, 20, -100], fov: 50 }, ease: 'sine', shake: 0.4, track: 'duel' },
+      { t0: 32, t1: 38, from: { pos: [60, -6, 180], look: [0, 20, -120], fov: 48 }, to: { pos: [44, -2, 160], look: [0, 20, -120], fov: 44 }, ease: 'sine', shake: 0.45, track: 'duel' },
+      { t0: 38, t1: 42, from: { pos: [-50, 20, 100], look: [0, 40, -140], fov: 50 }, to: { pos: [-30, 24, 84], look: [0, 40, -140], fov: 46 }, ease: 'power', shake: 0.4, track: 'core' },
+      { t0: 42, t1: 47, from: { pos: [16, 12, -20], look: [0, 14, -60], fov: 42 }, to: { pos: [8, 10, -10], look: [0, 14, -60], fov: 38 }, ease: 'sine', shake: 0.2, track: 'hero' },
+      { t0: 47, t1: 50, from: { pos: [-70, 20, 110], look: [0, 40, -140], fov: 50 }, to: { pos: [-50, 26, 90], look: [0, 40, -140], fov: 46 }, ease: 'power', shake: 0.6, track: 'duel' },
+      { t0: 50, t1: 54, from: { pos: [-70, 26, 250], look: [0, 10, -100], fov: 58 }, to: { pos: [-170, 64, 392], look: [0, 10, -100], fov: 60 }, ease: 'sine', shake: 0.3, track: 'hero' },
+      { t0: 54, t1: 60, from: { pos: [0, 9, 92],      look: [0, 9.5, 0],   fov: 44 }, to: { pos: [0, 8.4, 56],    look: [0, 9.8, 0],  fov: 40 }, ease: 'power', shake: 0.12 }
+    ]
+  },
+
+  /* 特效强度 */
+  fx: {
+    exposure: 0.95, bloomThreshold: 0.9, bloomIntensity: 0.6,
+    blurRadius1: 1.4, blurRadius2: 3.6,
+    aberration: 0.0015, vignette: 0.46, grain: 0.02,
+    trailIntensity: 1.0, bladeGlow: 1.0
+  },
+
+  quality: {
+    asteroids: 240, stars: 3400, dust: 460,
+    trailParticles: 110, pixelRatio: 1
+  },
+
+  world: {
+    heroPos: [0, 0, 0],
+    enemyPos: [[150, 22, -150], [196, -26, -128], [158, 62, -216]],
+    motherPos: [-430, 92, -910], motherRotY: 3.58,
+    earthPos: [2700, -1550, -4300], earthRadius: 2450,
+    sunDir: [-0.52, 0.34, -0.78], sunDist: 9200,
+    beltInner: 270, beltOuter: 1150, beltHeight: 170
+  },
+
+  /* 阶段二编排（幕一~幕二，0-26s）：关键帧路径 + 事件时刻，全部纯 f(t) */
+  choreo: {
+    /* 主角关键帧 [t, x,y,z, pitch,yaw,roll] */
+    hero: [
+      [0,    0, 6, 90,   0.10, 0.0, 0.0],
+      [2.5,  0, 4, 20,   0.05, 0.0, 0.0],
+      [5,   -6, 6, 0,    0.00, 0.15, 0.0],
+      [8,  -14, 8, -6,   0.00, 0.30, 0.0],
+      [9.2,-30, 10, -2,  0.00, 0.50, 0.9],
+      [10.2,-16, 14, 6,  0.00, 0.40, -0.5],
+      [11.5,-6, 10, 0,   0.00, 0.20, 0.0],
+      [13,  -2, 8, -4,  -0.05, 0.10, 0.0],
+      [16,   6, 8, -10,  0.00, 0.20, 0.0],
+      [18.5, 20, 10, -30, 0.10, 0.50, -0.3],
+      [20.2, 34, 12, -52, 0.00, 0.70, -0.6],
+      [21.5, 40, 16, -70, -0.10, 0.90, -0.2],
+      [23,   20, 14, -30, 0.00, 0.40, 0.0],
+      [26,   0, 0, 0,    0.00, 0.00, 0.0]
+    ],
+    /* 敌机关键帧 [t, x,y,z]，朝向自动对准主角；deaths 后隐藏并爆炸 */
+    foes: [
+      [[0, 150, 22, -150], [4, 90, 16, -90], [7, 52, 10, -52], [9, 46, 8, -46], [12, 40, 6, -40], [15.6, 40, 6, -40]],
+      [[0, 196, -26, -128], [4, 110, -16, -80], [7, 60, -10, -40], [9, 52, -8, -30], [12, 46, -6, -26], [17.6, 46, -6, -26]],
+      [[0, 158, 62, -216], [4, 100, 40, -120], [7, 60, 26, -70], [9, 50, 22, -60], [12, 44, 20, -56], [18, 40, 18, -52], [20.6, 40, 18, -52]]
+    ],
+    deaths: [15.6, 17.6, 20.6],
+    /*  homing 导弹 [launch, hit, targetIdx] */
+    missiles: [[12.4, 15.6, 0], [13.2, 17.6, 1]],
+    /* 敌机炮击 [fire, enemyIdx,  missOffsetX, missOffsetY] */
+    bolts: [[8.2, 0, 14, 6], [8.5, 1, -12, 8], [8.8, 2, 10, -10], [9.6, 0, -16, -6], [10.0, 2, 18, 4], [10.6, 1, -10, 12]],
+    boltLife: 0.9,
+    slash: 20.2,
+    /* 阶段三（幕三~幕四，26-54s） */
+    hero2: [
+      [26,   0, 0, 0,    0.00, 0.00, 0.00],
+      [29,   0, 6, -20,  0.05, 0.00, 0.00],
+      [33, -12, 10, -40, 0.00, 0.15, 0.25],
+      [36,  12, 8, -30,  0.00, -0.15, -0.25],
+      [39,   0, 10, -50, 0.00, 0.00, 0.00],
+      [42,   0, 12, -60, -0.05, 0.00, 0.00],
+      [46,   0, 14, -70, -0.10, 0.00, 0.00],
+      [47.5, 6, 24, -105, -0.30, 0.00, 0.00],
+      [48.5, 10, 40, -138, -0.20, 0.00, 0.00],
+      [49.5, 14, 44, -118, 0.10, 0.00, 0.00],
+      [51,   8, 30, -80,  0.20, 0.00, 0.00],
+      [54,   0, 0, 0,    0.00, 0.00, 0.00]
+    ],
+    mother: [
+      [26, -430, 92, -910, 3.58],
+      [30, -300, 70, -640, 3.58],
+      [36, -220, 52, -540, 3.58],
+      [42, -158, 40, -477, 3.58],
+      [46, -158, 40, -477, 3.58],
+      [48.5, -171, 42, -470, 3.62],
+      [54, -227, 55, -505, 3.70],
+      [60, -250, 58, -517, 3.74]
+    ],
+    mBolts: [[30.5, 10, 6], [31.2, -12, 8], [32, 8, -8], [33.5, -10, -6], [34.5, 14, 4], [35.5, -8, 10], [37, 10, -8], [38.5, -12, 6]],
+    hBolts: [[33, 0], [34.2, 1], [36.4, 0], [37.6, 1]],
+    finisher: { charge: 42, dash: 47, hit: 48.5 }
+  },
+
+  /* 字幕条（纯 f(t) 淡入淡出） */
+  subtitles: [
+    { t0: 1.2,  t1: 5.2,  text: '地球轨道外缘 · 小行星带' },
+    { t0: 5.8,  t1: 9.4,  text: '「黑潮」三机，包围完成。' },
+    { t0: 9.8,  t1: 12.0, text: '曙光号——突围开始。' },
+    { t0: 12.6, t1: 15.4, text: '导弹齐射，破阵！' },
+    { t0: 19.6, t1: 22.6, text: '光刃，斩。' },
+    { t0: 26.6, t1: 30.4, text: '黑潮母舰，压近。' },
+    { t0: 33.0, t1: 36.6, text: '核心，锁定。' },
+    { t0: 42.6, t1: 46.8, text: '全功率输出——必杀准备。' },
+    { t0: 55.2, t1: 59.6, text: '曙光，照亮黑夜。' }
+  ],
+  /* 必杀卡 / 定格标题卡 */
+  cards: {
+    finisher: { t0: 48.5, t1: 51.6, ja: '曉光一閃', zh: '必杀 · 晓光一闪' },
+    title: { t0: 55.0, t1: 60.0, zh: '曙光號', en: 'DAWN BREAKER', sub: 'ORBITAL ENGAGEMENT · 完' }
+  },
+  /* 程序化音频（离线烘焙整轨，零外部音频） */
+  audio: { bpm: 132, master: 0.9, music: 0.6, sfx: 0.9 }
+};
+
+/* ---------------- 确定性工具 ---------------- */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(CONFIG.seed);
+const lerp = (a, b, u) => a + (b - a) * u;
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const smooth = u => u * u * (3 - 2 * u);
+const easePow = u => 1 - Math.pow(1 - u, 3);
+/* 确定性"噪声"抖动：无理数频率正弦叠加，纯 f(t)，倒放安全 */
+function shakeNoise(t, s) {
+  return Math.sin(t * 13.7 + s * 1.7) * 0.52 + Math.sin(t * 27.3 + s * 3.1) * 0.31 + Math.sin(t * 47.9 + s * 5.3) * 0.17;
+}
+function fmtTC(t) {
+  const m = Math.floor(t / 60), s = Math.floor(t % 60), f = Math.floor((t % 1) * CONFIG.fps);
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') + ':' + String(f).padStart(2, '0');
+}
+function fmtShort(t) {
+  const m = Math.floor(t / 60), s = (t % 60).toFixed(1).padStart(4, '0');
+  return String(m).padStart(2, '0') + ':' + s;
+}
+function fail(msg) {
+  const veil = document.getElementById('veil');
+  veil.querySelector('.ring').style.display = 'none';
+  veil.querySelector('.txt').textContent = '无法起飞';
+  const e = document.getElementById('veil-err');
+  e.style.display = 'block'; e.textContent = msg;
+}
+if (!window.THREE || !window.gsap) {
+  fail('Three.js / GSAP 加载失败，请检查网络后刷新（库来自 cdnjs）。');
+  throw new Error('libs missing');
+}
+
+/* ---------------- 渲染器与自写后处理链 ----------------
+   cdnjs 全局版 three 不含官方 EffectComposer，故手写：
+   场景 → 亮度提取 → 半分辨率双向高斯×2 → 合成(泛光/色差/暗角/颗粒/ACES) */
+const W = CONFIG.width, H = CONFIG.height;
+const canvas = document.getElementById('stage');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (e) { fail('当前环境不支持 WebGL。'); throw e; }
+renderer.setPixelRatio(CONFIG.quality.pixelRatio);
+renderer.setSize(W, H, false);
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.outputEncoding = THREE.LinearEncoding;
+renderer.autoClear = true;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, W / H, CONFIG.camera.near, CONFIG.camera.far);
+camera.position.set(300, 120, 470);
+
+const gl = renderer.getContext();
+const hdrOK = renderer.capabilities.isWebGL2 || !!gl.getExtension('OES_texture_half_float');
+const rtType = hdrOK ? THREE.HalfFloatType : THREE.UnsignedByteType;
+function makeRT(w, h, depth) {
+  return new THREE.WebGLRenderTarget(w, h, {
+    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+    format: THREE.RGBAFormat, type: rtType, depthBuffer: !!depth, stencilBuffer: false
+  });
+}
+const rtScene = makeRT(W, H, true);
+const rtA = makeRT(W / 2, H / 2, false);
+const rtB = makeRT(W / 2, H / 2, false);
+
+const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const quadScene = new THREE.Scene();
+const quadGeo = new THREE.PlaneGeometry(2, 2);
+const quadMesh = new THREE.Mesh(quadGeo, null);
+quadMesh.frustumCulled = false;
+quadScene.add(quadMesh);
+const QUAD_VS = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+const brightMat = new THREE.ShaderMaterial({
+  uniforms: { tSrc: { value: null }, uThreshold: { value: CONFIG.fx.bloomThreshold } },
+  vertexShader: QUAD_VS,
+  fragmentShader: `
+    uniform sampler2D tSrc; uniform float uThreshold; varying vec2 vUv;
+    void main(){
+      vec3 c = texture2D(tSrc, vUv).rgb;
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      float w = smoothstep(uThreshold, uThreshold + 0.55, l);
+      gl_FragColor = vec4(c * w, 1.0);
+    }`
+});
+const blurMat = new THREE.ShaderMaterial({
+  uniforms: { tSrc: { value: null }, uDir: { value: new THREE.Vector2(1, 0) }, uTexel: { value: new THREE.Vector2(2 / W, 2 / H) }, uRadius: { value: 1.4 } },
+  vertexShader: QUAD_VS,
+  fragmentShader: `
+    uniform sampler2D tSrc; uniform vec2 uDir; uniform vec2 uTexel; uniform float uRadius;
+    varying vec2 vUv;
+    void main(){
+      vec2 off = uDir * uTexel * uRadius;
+      vec3 c = texture2D(tSrc, vUv).rgb * 0.227027;
+      c += texture2D(tSrc, vUv + off * 1.3846).rgb * 0.3162162;
+      c += texture2D(tSrc, vUv - off * 1.3846).rgb * 0.3162162;
+      c += texture2D(tSrc, vUv + off * 3.2308).rgb * 0.0702703;
+      c += texture2D(tSrc, vUv - off * 3.2308).rgb * 0.0702703;
+      gl_FragColor = vec4(c, 1.0);
+    }`
+});
+const compositeMat = new THREE.ShaderMaterial({
+  uniforms: {
+    tScene: { value: null }, tBloom: { value: null },
+    uBloom: { value: CONFIG.fx.bloomIntensity }, uExposure: { value: CONFIG.fx.exposure },
+    uAber: { value: CONFIG.fx.aberration }, uVig: { value: CONFIG.fx.vignette },
+    uGrain: { value: CONFIG.fx.grain }, uFlash: { value: 0 }, uTime: { value: 0 },
+    uRes: { value: new THREE.Vector2(W, H) }
+  },
+  vertexShader: QUAD_VS,
+  fragmentShader: `
+    uniform sampler2D tScene; uniform sampler2D tBloom;
+    uniform float uBloom, uExposure, uAber, uVig, uGrain, uFlash, uTime;
+    uniform vec2 uRes; varying vec2 vUv;
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)) + floor(uTime * 24.0) * 61.7) * 43758.5453); }
+    vec3 aces(vec3 x){
+      return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+    }
+    void main(){
+      vec2 d = vUv - 0.5;
+      float r2 = dot(d, d);
+      vec2 ab = d * uAber * (0.4 + r2 * 3.0) * 1.6;
+      vec3 c;
+      c.r = texture2D(tScene, vUv + ab).r;
+      c.g = texture2D(tScene, vUv).g;
+      c.b = texture2D(tScene, vUv - ab).b;
+      c += texture2D(tBloom, vUv).rgb * uBloom;
+      c = aces(c * uExposure);
+      c = mix(c, vec3(1.0), uFlash);
+      float vig = 1.0 - uVig * smoothstep(0.18, 0.72, r2);
+      c *= vig;
+      c = pow(max(c, 0.0), vec3(1.0 / 2.2));
+      c += (hash(vUv * uRes) - 0.5) * uGrain;
+      gl_FragColor = vec4(c, 1.0);
+    }`
+});
+function runPass(mat, target) {
+  quadMesh.material = mat;
+  renderer.setRenderTarget(target);
+  renderer.render(quadScene, quadCam);
+}
+function renderFrame(t, fxState) {
+  renderer.setRenderTarget(rtScene);
+  renderer.render(scene, camera);
+  brightMat.uniforms.tSrc.value = rtScene.texture;
+  runPass(brightMat, rtA);
+  const u = blurMat.uniforms;
+  u.tSrc.value = rtA.texture; u.uDir.value.set(1, 0); u.uRadius.value = CONFIG.fx.blurRadius1; runPass(blurMat, rtB);
+  u.tSrc.value = rtB.texture; u.uDir.value.set(0, 1); u.uRadius.value = CONFIG.fx.blurRadius1; runPass(blurMat, rtA);
+  u.tSrc.value = rtA.texture; u.uDir.value.set(1, 0); u.uRadius.value = CONFIG.fx.blurRadius2; runPass(blurMat, rtB);
+  u.tSrc.value = rtB.texture; u.uDir.value.set(0, 1); u.uRadius.value = CONFIG.fx.blurRadius2; runPass(blurMat, rtA);
+  const cu = compositeMat.uniforms;
+  cu.tScene.value = rtScene.texture; cu.tBloom.value = rtA.texture;
+  cu.uTime.value = t;
+  cu.uBloom.value = fxState.bloom; cu.uAber.value = fxState.aberration;
+  cu.uFlash.value = fxState.flash; cu.uVig.value = fxState.vignette;
+  renderer.setRenderTarget(null);
+  runPass(compositeMat, null);
+}
+
+/* ---------------- 灯光 ---------------- */
+const C = CONFIG.colors;
+const sunDir = new THREE.Vector3(...CONFIG.world.sunDir).normalize();
+const sunLight = new THREE.DirectionalLight(C.sun, 1.05);
+sunLight.position.copy(sunDir).multiplyScalar(1500);
+scene.add(sunLight);
+scene.add(new THREE.HemisphereLight(0x36487c, 0x04060c, 0.42));
+/* 冷调补光：从太阳反方向提亮暗面，避免机体/母舰纯黑剪影 */
+const fillLight = new THREE.DirectionalLight(0x4a6cff, 0.32);
+fillLight.position.set(0.55, -0.15, 0.82).multiplyScalar(1200);
+scene.add(fillLight);
+const rimLight = new THREE.PointLight(0x5fc9ff, 0.4, 300, 2);
+rimLight.position.set(-46, 34, 62);
+scene.add(rimLight);
+const enemyRim = new THREE.PointLight(0xff3652, 0.6, 180, 2);
+enemyRim.position.set(210, 40, -110);
+scene.add(enemyRim);
+
+/* ---------------- 环境：星云穹顶 / 星场 / 恒星 / 地球 / 小行星带 / 尘埃 ---------------- */
+const NOISE_GLSL = `
+  float hash13(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+  float vnoise(vec3 p){
+    vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    float a = hash13(i), b = hash13(i + vec3(1,0,0)), c = hash13(i + vec3(0,1,0)), d = hash13(i + vec3(1,1,0));
+    float e = hash13(i + vec3(0,0,1)), g = hash13(i + vec3(1,0,1)), h = hash13(i + vec3(0,1,1)), k = hash13(i + vec3(1,1,1));
+    return mix(mix(mix(a,b,f.x), mix(c,d,f.x), f.y), mix(mix(e,g,f.x), mix(h,k,f.x), f.y), f.z);
+  }
+  float fbm(vec3 p){
+    float v = 0.0, a = 0.5;
+    for(int i = 0; i < 4; i++){ v += a * vnoise(p); p = p * 2.13 + vec3(7.7); a *= 0.5; }
+    return v;
+  }
+`;
+
+/* 星云穹顶 */
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false,
+  uniforms: {
+    uA: { value: new THREE.Color(C.nebulaA) }, uB: { value: new THREE.Color(C.nebulaB) },
+    uC: { value: new THREE.Color(C.nebulaC) }, uTime: { value: 0 }
+  },
+  vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: NOISE_GLSL + `
+    uniform vec3 uA, uB, uC; uniform float uTime; varying vec3 vDir;
+    void main(){
+      vec3 d = normalize(vDir);
+      float n1 = fbm(d * 2.3 + vec3(3.1, 0.0, uTime * 0.004));
+      float n2 = fbm(d * 4.1 + vec3(11.7, 5.2, 0.0));
+      float band = pow(1.0 - abs(dot(d, normalize(vec3(0.2, 1.0, 0.35)))), 2.6);
+      vec3 col = vec3(0.012, 0.02, 0.045);
+      col = mix(col, uA * 0.5, smoothstep(0.42, 0.85, n1) * 0.85);
+      col = mix(col, uB * 0.42, smoothstep(0.5, 0.92, n2) * band);
+      col += uC * pow(max(n2 - 0.55, 0.0) * 2.2, 3.0) * 0.5;
+      col += vec3(0.05, 0.07, 0.13) * band * 0.4;
+      gl_FragColor = vec4(col, 1.0);
+    }`
+});
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(11500, 48, 32), skyMat));
+
+/* 远景星场（闪烁 = f(t)） */
+function buildStars() {
+  const n = CONFIG.quality.stars;
+  const pos = new Float32Array(n * 3), size = new Float32Array(n), phase = new Float32Array(n), tint = new Float32Array(n * 3);
+  const col = new THREE.Color();
+  for (let i = 0; i < n; i++) {
+    const u = rng() * 2 - 1, th = rng() * Math.PI * 2, r = 7200 + rng() * 1600;
+    const s = Math.sqrt(1 - u * u);
+    pos[i * 3] = r * s * Math.cos(th); pos[i * 3 + 1] = r * u; pos[i * 3 + 2] = r * s * Math.sin(th);
+    size[i] = 1.1 + Math.pow(rng(), 2.4) * 3.1;
+    phase[i] = rng() * 6.283;
+    col.setHex(C.starTints[Math.floor(rng() * C.starTints.length)]);
+    tint[i * 3] = col.r; tint[i * 3 + 1] = col.g; tint[i * 3 + 2] = col.b;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+  g.setAttribute('aPhase', new THREE.BufferAttribute(phase, 1));
+  g.setAttribute('aTint', new THREE.BufferAttribute(tint, 3));
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: `
+      attribute float aSize; attribute float aPhase; attribute vec3 aTint;
+      uniform float uTime; varying vec3 vTint; varying float vTw;
+      void main(){
+        vTint = aTint;
+        vTw = 0.72 + 0.28 * sin(uTime * (1.3 + fract(aPhase) * 2.2) + aPhase * 7.0);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = aSize;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      varying vec3 vTint; varying float vTw;
+      void main(){
+        float d = length(gl_PointCoord - 0.5);
+        float a = smoothstep(0.5, 0.06, d);
+        gl_FragColor = vec4(vTint * vTw * 1.35, a * vTw);
+      }`
+  });
+  const pts = new THREE.Points(g, m);
+  pts.frustumCulled = false;
+  scene.add(pts);
+  return m;
+}
+const starMat = buildStars();
+
+/* 恒星（太阳）：核心 + 光晕 + 横向光斑，始终面向相机 */
+const sunGroup = new THREE.Group();
+sunGroup.position.copy(sunDir).multiplyScalar(CONFIG.world.sunDist);
+function sunPlane(size, power, tint, stretchX, stretchY) {
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uTint: { value: new THREE.Color(tint) }, uPower: { value: power }, uStretch: { value: new THREE.Vector2(stretchX || 1, stretchY || 1) } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+      uniform vec3 uTint; uniform float uPower; uniform vec2 uStretch; varying vec2 vUv;
+      void main(){
+        vec2 d = (vUv - 0.5) * 2.0 * uStretch;
+        float r = length(d);
+        float a = pow(max(1.0 - r, 0.0), 2.4);
+        gl_FragColor = vec4(uTint * uPower * a, a);
+      }`
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size), m);
+  sunGroup.add(mesh);
+  return mesh;
+}
+sunPlane(1700, 0.4, C.sun, 1, 1);
+sunPlane(430, 3.4, C.sunCore, 1, 1);
+sunPlane(3200, 0.16, C.sun, 1.0, 7);
+scene.add(sunGroup);
+
+/* 地球：程序化大陆 / 云层 / 大气辉光 */
+const earthGroup = new THREE.Group();
+earthGroup.position.set(...CONFIG.world.earthPos);
+const earthUniforms = {
+  uSun: { value: sunDir }, uTime: { value: 0 },
+  uOcean: { value: new THREE.Color(C.earthOcean) },
+  uLand: { value: new THREE.Color(C.earthLand) },
+  uIce: { value: new THREE.Color(C.earthIce) }
+};
+const earthMat = new THREE.ShaderMaterial({
+  uniforms: earthUniforms,
+  vertexShader: `
+    varying vec3 vN; varying vec3 vW;
+    void main(){
+      vN = normalize(mat3(modelMatrix) * normal);
+      vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz;
+      gl_Position = projectionMatrix * viewMatrix * w;
+    }`,
+  fragmentShader: NOISE_GLSL + `
+    uniform vec3 uSun, uOcean, uLand, uIce; uniform float uTime;
+    varying vec3 vN; varying vec3 vW;
+    void main(){
+      vec3 n = normalize(vN);
+      float cont = fbm(n * 2.7 + vec3(4.7));
+      float land = smoothstep(0.5, 0.55, cont);
+      float detail = fbm(n * 8.0 + vec3(9.2));
+      vec3 ocean = mix(uOcean * 0.55, uOcean * 1.25, detail);
+      vec3 soil = mix(uLand, vec3(0.36, 0.29, 0.17), smoothstep(0.45, 0.8, detail));
+      vec3 surf = mix(ocean, soil, land);
+      float ice = smoothstep(0.78, 0.88, abs(n.y) + detail * 0.1);
+      surf = mix(surf, uIce, ice);
+      float dl = dot(n, uSun);
+      float day = smoothstep(-0.06, 0.28, dl);
+      vec3 viewDir = normalize(cameraPosition - vW);
+      float spec = pow(max(dot(reflect(-uSun, n), viewDir), 0.0), 42.0) * (1.0 - land) * (1.0 - ice);
+      vec3 col = surf * (0.035 + day * 1.25) + vec3(1.0, 0.95, 0.8) * spec * day * 0.7;
+      col += uOcean * 0.06 * (1.0 - day);
+      gl_FragColor = vec4(col, 1.0);
+    }`
+});
+const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(CONFIG.world.earthRadius, 72, 48), earthMat);
+earthGroup.add(earthMesh);
+const cloudMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false,
+  uniforms: { uSun: { value: sunDir }, uTime: { value: 0 } },
+  vertexShader: earthMat.vertexShader,
+  fragmentShader: NOISE_GLSL + `
+    uniform vec3 uSun; uniform float uTime; varying vec3 vN; varying vec3 vW;
+    void main(){
+      vec3 n = normalize(vN);
+      float cl = fbm(n * 3.6 + vec3(uTime * 0.008, 2.2, 0.0));
+      cl = smoothstep(0.52, 0.74, cl);
+      float day = smoothstep(-0.06, 0.28, dot(n, uSun));
+      gl_FragColor = vec4(vec3(0.95, 0.97, 1.0) * (0.05 + day * 1.2), cl * 0.85);
+    }`
+});
+const cloudMesh = new THREE.Mesh(new THREE.SphereGeometry(CONFIG.world.earthRadius * 1.014, 64, 40), cloudMat);
+earthGroup.add(cloudMesh);
+const atmoMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  uniforms: { uSun: { value: sunDir } },
+  vertexShader: earthMat.vertexShader,
+  fragmentShader: `
+    uniform vec3 uSun; varying vec3 vN; varying vec3 vW;
+    void main(){
+      vec3 n = normalize(vN);
+      vec3 viewDir = normalize(cameraPosition - vW);
+      float rim = pow(1.0 - abs(dot(viewDir, n)), 3.4);
+      float day = smoothstep(-0.2, 0.35, dot(n, uSun));
+      gl_FragColor = vec4(vec3(0.3, 0.55, 1.0) * rim * (0.25 + day * 0.9), rim);
+    }`
+});
+earthGroup.add(new THREE.Mesh(new THREE.SphereGeometry(CONFIG.world.earthRadius * 1.05, 64, 40), atmoMat));
+scene.add(earthGroup);
+
+/* 小行星带：InstancedMesh + 预置旋转参数，逐帧由 t 解析求值 */
+function rockGeometry(seedOff) {
+  const g = new THREE.IcosahedronGeometry(1, 2);
+  const p = g.attributes.position;
+  const r = mulberry32(CONFIG.seed + seedOff);
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const h = Math.abs(Math.sin(v.x * 12.9898 + v.y * 78.233 + v.z * 37.719 + seedOff) * 43758.5453) % 1;
+    const k = 0.7 + h * 0.55;
+    p.setXYZ(i, v.x * k, v.y * (0.72 + r() * 0.5), v.z * k);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+const rockMat = new THREE.MeshStandardMaterial({ color: C.rock, roughness: 0.96, metalness: 0.04, flatShading: true });
+const beltGroup = new THREE.Group();
+const rockData = [];
+const rockMeshes = [];
+/* 镜头走廊 clearance：随机岩石不得贴近任何镜头路径，避免贴脸遮挡 */
+const _segA = new THREE.Vector3(), _segB = new THREE.Vector3(), _segP = new THREE.Vector3(), _segAB = new THREE.Vector3(), _segAP = new THREE.Vector3();
+function distToShotPaths(x, y, z) {
+  _segP.set(x, y, z);
+  let min = Infinity;
+  for (let i = 0; i < CONFIG.camera.shots.length; i++) {
+    const s = CONFIG.camera.shots[i];
+    _segA.set(...s.from.pos); _segB.set(...s.to.pos);
+    _segAB.subVectors(_segB, _segA); _segAP.subVectors(_segP, _segA);
+    const u = clamp(_segAP.dot(_segAB) / Math.max(_segAB.lengthSq(), 1e-6), 0, 1);
+    _segAP.copy(_segA).addScaledVector(_segAB, u);
+    min = Math.min(min, _segP.distanceTo(_segAP));
+  }
+  return min;
+}
+{
+  const total = CONFIG.quality.asteroids;
+  for (let half = 0; half < 2; half++) {
+    const count = Math.floor(total / 2);
+    const im = new THREE.InstancedMesh(rockGeometry(half * 977 + 13), rockMat, count);
+    im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    for (let i = 0; i < count; i++) {
+      let x, y, z, s;
+      let tries = 0;
+      do {
+        const ang = rng() * Math.PI * 2;
+        const rad = lerp(CONFIG.world.beltInner, CONFIG.world.beltOuter, Math.pow(rng(), 0.8));
+        x = Math.cos(ang) * rad; z = Math.sin(ang) * rad;
+        y = (rng() * 2 - 1) * CONFIG.world.beltHeight * (0.35 + rng() * 0.65);
+        tries++;
+      } while (distToShotPaths(x, y, z) < 80 && tries < 24);
+      s = 3.5 + Math.pow(rng(), 2.2) * 26;
+      rockData.push({
+        mesh: half, idx: i, x, y, z, s,
+        sx: 0.7 + rng() * 0.7, sy: 0.7 + rng() * 0.7, sz: 0.7 + rng() * 0.7,
+        ax: rng() * 6.28, ay: rng() * 6.28, az: rng() * 6.28,
+        wx: (rng() - 0.5) * 0.16, wy: (rng() - 0.5) * 0.2, wz: (rng() - 0.5) * 0.14
+      });
+    }
+    beltGroup.add(im);
+    rockMeshes.push(im);
+  }
+}
+scene.add(beltGroup);
+const _rm = new THREE.Matrix4(), _rq = new THREE.Quaternion(), _re = new THREE.Euler(), _rp = new THREE.Vector3(), _rs = new THREE.Vector3();
+function updateRocks(t) {
+  beltGroup.rotation.y = t * 0.0016;
+  for (let i = 0; i < rockData.length; i++) {
+    const d = rockData[i];
+    _re.set(d.ax + d.wx * t, d.ay + d.wy * t, d.az + d.wz * t);
+    _rq.setFromEuler(_re);
+    _rp.set(d.x, d.y, d.z); _rs.set(d.s * d.sx, d.s * d.sy, d.s * d.sz);
+    _rm.compose(_rp, _rq, _rs);
+    rockMeshes[d.mesh].setMatrixAt(d.idx, _rm);
+  }
+  rockMeshes[0].instanceMatrix.needsUpdate = true;
+  rockMeshes[1].instanceMatrix.needsUpdate = true;
+}
+
+/* 漂浮尘埃（解析 wrap，纯 f(t)） */
+const dustMat = (() => {
+  const n = CONFIG.quality.dust, box = 840;
+  const pos = new Float32Array(n * 3), seed = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    pos[i * 3] = (rng() - 0.5) * box; pos[i * 3 + 1] = (rng() - 0.5) * 420; pos[i * 3 + 2] = (rng() - 0.5) * box;
+    seed[i] = rng();
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: `
+      attribute float aSeed; uniform float uTime; varying float vA;
+      void main(){
+        vec3 p = position + vec3(6.0, 1.4, 3.2) * uTime * (0.5 + aSeed);
+        p.x = mod(p.x + 420.0, 840.0) - 420.0;
+        p.y = mod(p.y + 210.0, 420.0) - 210.0;
+        p.z = mod(p.z + 420.0, 840.0) - 420.0;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        float dist = -mv.z;
+        vA = smoothstep(700.0, 120.0, dist) * 0.4;
+        gl_PointSize = clamp(260.0 / dist, 0.6, 2.6);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      varying float vA;
+      void main(){
+        float d = length(gl_PointCoord - 0.5);
+        gl_FragColor = vec4(vec3(0.55, 0.7, 0.95), smoothstep(0.5, 0.1, d) * vA);
+      }`
+  });
+  const pts = new THREE.Points(g, m);
+  pts.frustumCulled = false;
+  scene.add(pts);
+  return m;
+})();
+
+/* ---------------- 共享材质 / 通用粒子尾焰 ---------------- */
+function stdMat(hex, metal, rough) { return new THREE.MeshStandardMaterial({ color: new THREE.Color(hex).convertSRGBToLinear(), metalness: metal, roughness: rough }); }
+function glowMat(hex, boost) { return new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).convertSRGBToLinear().multiplyScalar(boost || 2.4) }); }
+const M = {
+  white: stdMat(C.heroWhite, 0.55, 0.62), silver: stdMat(C.heroSilver, 0.72, 0.55),
+  blue: stdMat(C.heroBlue, 0.6, 0.55), deep: stdMat(C.heroDeep, 0.5, 0.6),
+  gold: stdMat(C.heroGold, 0.8, 0.45), joint: stdMat(0x1a2030, 0.6, 0.6),
+  eHull: stdMat(C.enemyHull, 0.82, 0.42), eArmor: stdMat(C.enemyArmor, 0.75, 0.38),
+  mHull: stdMat(C.motherHull, 0.8, 0.5), mPlate: stdMat(C.motherPlate, 0.72, 0.44),
+  glowCyan: glowMat(C.heroGlow, 1.9), glowRed: glowMat(C.enemyRed, 1.9),
+  glowOrange: glowMat(C.motherCore, 2.0), glowWhite: glowMat(0xffffff, 2.2)
+};
+function B(parent, w, h, d, mat, x, y, z, rx, ry, rz) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x || 0, y || 0, z || 0);
+  m.rotation.set(rx || 0, ry || 0, rz || 0);
+  parent.add(m);
+  return m;
+}
+function cyl(parent, rt, rb, h, seg, mat, x, y, z, rx, ry, rz) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
+  m.position.set(x || 0, y || 0, z || 0);
+  m.rotation.set(rx || 0, ry || 0, rz || 0);
+  parent.add(m);
+  return m;
+}
+
+/* 解析式尾焰：age = fract(t/life + seed)，位置/尺寸/透明度全由 t 求出 */
+const trailMats = [];
+function makeTrail(opts) {
+  const n = opts.count || CONFIG.quality.trailParticles;
+  const pos = new Float32Array(n * 3), seed = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    seed[i * 4] = rng(); seed[i * 4 + 1] = rng(); seed[i * 4 + 2] = rng(); seed[i * 4 + 3] = rng();
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 4));
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 }, uIntensity: { value: 1 },
+      uLength: { value: opts.length }, uSpread: { value: opts.spread },
+      uSize: { value: opts.size }, uLife: { value: opts.life || 0.55 },
+      uColor: { value: new THREE.Color(opts.color) }
+    },
+    vertexShader: `
+      attribute vec4 aSeed;
+      uniform float uTime, uIntensity, uLength, uSpread, uSize, uLife;
+      varying float vAge; varying float vOn;
+      void main(){
+        float age = fract(uTime / uLife + aSeed.w);
+        vAge = age; vOn = uIntensity;
+        float spread = uSpread * (0.35 + age * 1.6);
+        vec3 p = vec3((aSeed.x - 0.5) * spread, (aSeed.y - 0.5) * spread, age * uLength * (0.75 + aSeed.z * 0.5));
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        float sz = uSize * (1.0 - age * 0.72) * (0.6 + aSeed.z * 0.8);
+        gl_PointSize = clamp(sz * 340.0 / max(-mv.z, 1.0), 0.5, 64.0);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; varying float vAge; varying float vOn;
+      void main(){
+        float d = length(gl_PointCoord - 0.5);
+        float a = smoothstep(0.5, 0.05, d) * pow(1.0 - vAge, 1.7) * vOn;
+        vec3 col = mix(vec3(1.05, 1.05, 1.0), uColor * 1.4, smoothstep(0.0, 0.4, vAge));
+        gl_FragColor = vec4(col, a);
+      }`
+  });
+  const pts = new THREE.Points(g, m);
+  pts.frustumCulled = false;
+  trailMats.push(m);
+  return pts;
+}
+
+/* ---------------- 主角机「曙光号」：人形机甲，程序化几何 ---------------- */
+function buildHero() {
+  const root = new THREE.Group();
+  const hips = new THREE.Group(); hips.position.y = 7.0; root.add(hips);
+  B(hips, 3.0, 1.5, 2.1, M.deep, 0, 0, 0);
+  B(hips, 3.4, 0.5, 2.3, M.blue, 0, 0.65, 0);
+  cyl(hips, 0.9, 1.0, 0.9, 12, M.joint, 0, 1.0, 0);
+
+  const torso = new THREE.Group(); torso.position.y = 1.5; hips.add(torso);
+  B(torso, 4.4, 3.0, 2.6, M.white, 0, 1.2, 0);
+  B(torso, 4.8, 1.5, 0.7, M.white, 0, 2.0, -1.25, -0.12);
+  B(torso, 3.2, 0.9, 0.5, M.blue, 0, 0.35, -1.32);
+  const core = cyl(torso, 0.62, 0.62, 0.3, 20, M.glowCyan, 0, 1.5, -1.42, Math.PI / 2);
+  cyl(torso, 0.85, 0.85, 0.16, 20, M.silver, 0, 1.5, -1.46, Math.PI / 2);
+  B(torso, 2.2, 0.6, 2.0, M.deep, 0, 2.85, 0.2);
+
+  const head = new THREE.Group(); head.position.y = 3.5; torso.add(head);
+  B(head, 1.5, 1.25, 1.55, M.white, 0, 0.45, 0);
+  B(head, 1.2, 0.7, 0.4, M.silver, 0, 0.12, -0.72);
+  const eyes = B(head, 1.05, 0.2, 0.1, M.glowCyan, 0, 0.52, -0.79);
+  B(head, 0.5, 0.35, 0.5, M.blue, 0, -0.28, -0.55);
+  B(head, 0.14, 1.5, 0.28, M.gold, -0.52, 1.25, -0.25, 0, 0, 0.6);
+  B(head, 0.14, 1.5, 0.28, M.gold, 0.52, 1.25, -0.25, 0, 0, -0.6);
+  B(head, 0.1, 0.9, 0.1, M.silver, 0, 1.3, 0.4);
+
+  function arm(side) {
+    const sh = new THREE.Group(); sh.position.set(2.85 * side, 2.3, 0); torso.add(sh);
+    B(sh, 2.1, 1.5, 2.3, M.white, 0.55 * side, 0.35, 0);
+    B(sh, 2.2, 0.45, 2.4, M.blue, 0.55 * side, 1.15, 0);
+    const up = new THREE.Group(); up.position.set(0.75 * side, -0.3, 0); sh.add(up);
+    B(up, 1.05, 2.3, 1.15, M.silver, 0, -1.15, 0);
+    const el = new THREE.Group(); el.position.y = -2.4; up.add(el);
+    B(el, 1.25, 2.5, 1.35, M.white, 0, -1.25, 0);
+    B(el, 0.4, 2.0, 1.4, M.blue, 0.55 * side, -1.25, 0);
+    B(el, 0.85, 0.95, 0.95, M.joint, 0, -2.85, 0);
+    return { sh, up, el };
+  }
+  const armL = arm(-1), armR = arm(1);
+
+  /* 光刃：右手持握，长度/亮度由状态驱动 */
+  const bladeGroup = new THREE.Group();
+  bladeGroup.position.set(0, -3.1, -0.3);
+  bladeGroup.rotation.set(-0.45, 0, -0.55);
+  armR.el.add(bladeGroup);
+  cyl(bladeGroup, 0.16, 0.2, 1.5, 10, M.joint, 0, 0.2, 0);
+  cyl(bladeGroup, 0.24, 0.24, 0.3, 10, M.gold, 0, 0.85, 0);
+  const bladeMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    uniforms: { uTime: { value: 0 }, uGlow: { value: 1 }, uColor: { value: new THREE.Color(C.heroGlow) } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+      uniform float uTime, uGlow; uniform vec3 uColor; varying vec2 vUv;
+      void main(){
+        float dx = abs(vUv.x - 0.5);
+        float core = smoothstep(0.24, 0.05, dx);
+        float body = smoothstep(0.5, 0.3, dx);
+        float tip = smoothstep(1.0, 0.84, vUv.y) * smoothstep(0.0, 0.04, vUv.y);
+        float flick = 0.9 + 0.1 * sin(uTime * 37.0 + vUv.y * 22.0);
+        vec3 col = mix(uColor * 1.2, vec3(2.0), core) * uGlow * flick;
+        gl_FragColor = vec4(col, body * tip);
+      }`
+  });
+  const blade = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 13.5, 1, 10), bladeMat);
+  blade.position.y = 7.6;
+  bladeGroup.add(blade);
+  const bladeCross = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 13.5, 1, 10), bladeMat);
+  bladeCross.position.y = 7.6; bladeCross.rotation.y = Math.PI / 2;
+  bladeGroup.add(bladeCross);
+
+  function leg(side) {
+    const th = new THREE.Group(); th.position.set(1.3 * side, -0.75, 0); hips.add(th);
+    B(th, 1.5, 2.9, 1.7, M.white, 0, -1.45, 0);
+    B(th, 1.6, 0.5, 1.8, M.blue, 0, -0.4, 0);
+    const kn = new THREE.Group(); kn.position.y = -3.0; th.add(kn);
+    B(kn, 1.35, 2.9, 1.55, M.silver, 0, -1.45, 0);
+    B(kn, 0.5, 2.2, 0.4, M.blue, 0, -1.4, -0.85);
+    B(kn, 1.55, 0.75, 2.6, M.deep, 0, -3.1, -0.45);
+    return { th, kn };
+  }
+  const legL = leg(-1), legR = leg(1);
+
+  const pack = new THREE.Group(); pack.position.set(0, 1.4, 1.55); torso.add(pack);
+  B(pack, 3.2, 2.2, 1.1, M.deep, 0, 0, 0);
+  B(pack, 3.6, 0.5, 1.2, M.blue, 0, 1.2, 0);
+  B(pack, 0.35, 2.6, 1.6, M.white, -2.0, 0.5, 0.2, 0, 0, 0.3);
+  B(pack, 0.35, 2.6, 1.6, M.white, 2.0, 0.5, 0.2, 0, 0, -0.3);
+  const heroTrails = [];
+  [-1.05, 1.05].forEach(x => {
+    const nz = new THREE.Group(); nz.position.set(x, -0.55, 0.75); pack.add(nz);
+    cyl(nz, 0.42, 0.6, 0.9, 14, M.silver, 0, 0, 0.2, Math.PI / 2);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.4, 16), M.glowCyan);
+    disc.position.z = 0.68; nz.add(disc);
+    const tr = makeTrail({ length: 16, spread: 0.9, size: 2.6, color: C.trailHero, life: 0.5 });
+    tr.position.z = 0.7; nz.add(tr);
+    heroTrails.push(tr.material);
+  });
+
+  root.position.set(...CONFIG.world.heroPos);
+  scene.add(root);
+  return { root, hips, torso, head, armL, armR, legL, legR, bladeGroup, bladeMat, eyes, core, trailMats: heroTrails };
+}
+const hero = buildHero();
+
+/* ---------------- 敌方「黑潮」战机 ×3 ---------------- */
+function buildEnemy(idx) {
+  const root = new THREE.Group();
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(1.05, 6.4, 6), M.eHull);
+  nose.rotation.x = -Math.PI / 2; nose.position.z = -3.4; root.add(nose);
+  B(root, 1.9, 1.15, 5.2, M.eHull, 0, 0, 1.4);
+  B(root, 1.3, 0.5, 3.4, M.eArmor, 0, 0.72, 0.8);
+  B(root, 0.62, 0.16, 1.7, M.glowRed, 0, 0.66, -0.9);
+  [-1, 1].forEach(s => {
+    B(root, 6.4, 0.16, 2.5, M.eArmor, 3.1 * s, -0.1, 2.3, 0, -0.48 * s, 0.1 * s);
+    B(root, 6.0, 0.1, 0.28, M.glowRed, 3.2 * s, -0.06, 3.25, 0, -0.48 * s, 0.1 * s);
+    B(root, 0.16, 1.5, 1.7, M.eHull, 0.85 * s, 0.95, 3.5, 0, 0, -0.32 * s);
+    B(root, 0.2, 0.35, 3.0, M.glowRed, 0.98 * s, 0.1, 1.2);
+  });
+  const trails = [];
+  [-0.75, 0.75].forEach(x => {
+    const nz = new THREE.Group(); nz.position.set(x, 0, 4.1); root.add(nz);
+    cyl(nz, 0.36, 0.48, 0.8, 12, M.eArmor, 0, 0, 0, Math.PI / 2);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.34, 14), M.glowRed);
+    disc.position.z = 0.42; nz.add(disc);
+    const tr = makeTrail({ length: 15, spread: 0.7, size: 2.2, color: C.trailEnemy, life: 0.45 });
+    tr.position.z = 0.45; nz.add(tr);
+    trails.push(tr.material);
+  });
+  const p = CONFIG.world.enemyPos[idx];
+  root.position.set(p[0], p[1], p[2]);
+  root.lookAt(hero.root.position.x, 8, hero.root.position.z);
+  root.rotateY(Math.PI);
+  root.rotateZ((idx - 1) * 0.14);
+  scene.add(root);
+  return { root, trails, basePos: root.position.clone(), baseRot: root.rotation.clone(), phase: idx * 2.1 };
+}
+const enemies = [buildEnemy(0), buildEnemy(1), buildEnemy(2)];
+
+/* ---------------- 「黑潮」巨型母舰（约主角 37 倍尺度） ---------------- */
+function buildMother() {
+  const root = new THREE.Group();
+  const spine = cyl(root, 27, 34, 520, 6, M.mHull, 0, 0, 0, Math.PI / 2);
+  spine.rotation.z = Math.PI / 6;
+  const prow = new THREE.Mesh(new THREE.ConeGeometry(31, 130, 4), M.mPlate);
+  prow.rotation.x = -Math.PI / 2; prow.rotation.y = Math.PI / 4;
+  prow.position.z = -315; root.add(prow);
+  for (let i = 0; i < 8; i++) {
+    const z = -215 + i * 60, w = 58 + (i % 3) * 12;
+    B(root, w, 9, 46, M.mPlate, 0, 30 + (i % 2) * 5, z);
+    B(root, w * 0.7, 7, 38, M.mPlate, 0, -29 - (i % 2) * 4, z + 18);
+  }
+  [-1, 1].forEach(s => {
+    B(root, 22, 30, 150, M.mPlate, 40 * s, -2, -30);
+    B(root, 18, 24, 110, M.mPlate, 36 * s, -8, 130);
+    B(root, 1.6, 5, 95, M.glowRed, 51.5 * s, -2, -30);
+    B(root, 1.4, 2.2, 300, M.glowRed, 29 * s, 12, 20);
+  });
+  const tower = new THREE.Group(); tower.position.set(0, 42, 70); root.add(tower);
+  B(tower, 30, 16, 42, M.mPlate, 0, 0, 0);
+  B(tower, 21, 12, 28, M.mHull, 0, 13, -2);
+  B(tower, 11, 9, 15, M.mPlate, 0, 23, -4);
+  B(tower, 24, 1.6, 2, M.glowRed, 0, 4, -21.5);
+  cyl(tower, 0.8, 1.4, 26, 8, M.mHull, 0, 38, -4);
+  B(tower, 8, 0.8, 0.8, M.glowRed, 0, 50, -4);
+  for (let i = 0; i < 10; i++) {
+    const z = -240 + i * 55, up = i % 2 === 0;
+    const tur = new THREE.Group(); tur.position.set((i % 3 - 1) * 16, up ? 36 : -35, z); root.add(tur);
+    cyl(tur, 4.6, 5.4, 4, 10, M.mPlate, 0, 0, 0);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(3.6, 10, 8), M.mHull);
+    dome.position.y = up ? 2.4 : -2.4; tur.add(dome);
+    cyl(tur, 0.7, 0.7, 8, 6, M.mHull, 0, up ? 3.4 : -3.4, -3.4, Math.PI / 2.4);
+  }
+  const trails = [];
+  [[-22, 14], [22, 14], [-22, -14], [22, -14]].forEach(([x, y]) => {
+    const nz = new THREE.Group(); nz.position.set(x, y, 272); root.add(nz);
+    cyl(nz, 12, 15, 28, 14, M.mPlate, 0, 0, 0, Math.PI / 2);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(10.5, 20), M.glowOrange);
+    disc.position.z = 14.5; nz.add(disc);
+    const tr = makeTrail({ length: 95, spread: 5, size: 6, color: C.trailMother, life: 0.9, count: 130 });
+    tr.position.z = 15; nz.add(tr);
+    trails.push(tr.material);
+  });
+  /* 核心弱点：脉冲球 + 双旋转环 */
+  const coreGroup = new THREE.Group(); coreGroup.position.set(0, 0, -372); root.add(coreGroup);
+  cyl(coreGroup, 23, 26, 16, 18, M.mHull, 0, 0, 8, Math.PI / 2);
+  const core = new THREE.Mesh(new THREE.SphereGeometry(10, 24, 18), M.glowOrange.clone());
+  coreGroup.add(core);
+  const ringMat = glowMat(C.motherRed, 2.0);
+  const ring1 = new THREE.Mesh(new THREE.TorusGeometry(24, 1.1, 8, 48), ringMat);
+  const ring2 = new THREE.Mesh(new THREE.TorusGeometry(30, 0.8, 8, 48), ringMat);
+  coreGroup.add(ring1); coreGroup.add(ring2);
+
+  root.position.set(...CONFIG.world.motherPos);
+  root.rotation.y = CONFIG.world.motherRotY;
+  scene.add(root);
+  return { root, core, coreGroup, ring1, ring2, trails, baseRotY: CONFIG.world.motherRotY, basePos: root.position.clone() };
+}
+const mother = buildMother();
+
+/* ---------------- 阶段二：解析式战斗特效（位置/透明度全由 t 求出，seek/倒放安全） ---------------- */
+const CH = CONFIG.choreo;
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
+const _q1 = new THREE.Quaternion(), _UP = new THREE.Vector3(0, 1, 0), _FWD = new THREE.Vector3(0, 0, -1);
+function keyPos(keys, t, out) {
+  if (t <= keys[0][0]) return out.set(keys[0][1], keys[0][2], keys[0][3]);
+  for (let i = 0; i < keys.length - 1; i++) {
+    const a = keys[i], b = keys[i + 1];
+    if (t >= a[0] && t <= b[0]) {
+      const u = smooth((t - a[0]) / (b[0] - a[0]));
+      return out.set(lerp(a[1], b[1], u), lerp(a[2], b[2], u), lerp(a[3], b[3], u));
+    }
+  }
+  const l = keys[keys.length - 1]; return out.set(l[1], l[2], l[3]);
+}
+function heroPosAt(t, out) { return keyPos(CH.hero, t, out); }
+function heroRotAt(keys, t, out) {
+  const k = keys;
+  if (t <= k[0][0]) return out.set(k[0][4], k[0][5], k[0][6]);
+  for (let i = 0; i < k.length - 1; i++) {
+    const a = k[i], b = k[i + 1];
+    if (t >= a[0] && t <= b[0]) {
+      const u = smooth((t - a[0]) / (b[0] - a[0]));
+      return out.set(lerp(a[4], b[4], u), lerp(a[5], b[5], u), lerp(a[6], b[6], u));
+    }
+  }
+  const l = k[k.length - 1]; return out.set(l[4], l[5], l[6]);
+}
+function foePosAt(i, t, out) { return keyPos(CH.foes[i], t, out); }
+const _v4 = new THREE.Vector3(), _Y = new THREE.Vector3(0, 1, 0);
+function motherPosAt(t, out) { return keyPos(CH.mother, t, out); }
+function motherRotAt(t) {
+  const k = CH.mother;
+  if (t <= k[0][0]) return k[0][4];
+  for (let i = 0; i < k.length - 1; i++) {
+    const a = k[i], b = k[i + 1];
+    if (t >= a[0] && t <= b[0]) return lerp(a[4], b[4], smooth((t - a[0]) / (b[0] - a[0])));
+  }
+  return k[k.length - 1][4];
+}
+function coreAt(t, out) {
+  motherPosAt(t, out);
+  _v4.set(0, 0, -372).applyAxisAngle(_Y, motherRotAt(t));
+  return out.add(_v4);
+}
+function heroAnyAt(t, out) { return keyPos(t < 26 ? CH.hero : CH.hero2, t, out); }
+
+/* 解析式爆炸粒子：age=(t-uStart)/uLife，减速扩散 + 衰减 */
+function makeBurst(opts) {
+  const n = opts.count || 80;
+  const pos = new Float32Array(n * 3), seed = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) { seed[i * 4] = rng(); seed[i * 4 + 1] = rng(); seed[i * 4 + 2] = rng(); seed[i * 4 + 3] = rng(); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 4));
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 }, uStart: { value: opts.start }, uLife: { value: opts.life },
+      uRadius: { value: opts.radius }, uSize: { value: opts.size },
+      uColor: { value: new THREE.Color(opts.color) }
+    },
+    vertexShader: `
+      attribute vec4 aSeed; uniform float uTime, uStart, uLife, uRadius, uSize;
+      varying float vAge; varying float vOn;
+      void main(){
+        float age = (uTime - uStart) / uLife;
+        vOn = step(0.0, age) * step(age, 1.0); vAge = clamp(age, 0.0, 1.0);
+        vec3 dir = normalize(aSeed.xyz - 0.5 + 1e-4);
+        float dec = 1.0 - exp(-vAge * 3.0);
+        vec3 p = dir * (0.3 + aSeed.w * 0.7) * uRadius * dec;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        float sz = uSize * (1.0 - vAge * 0.8) * vOn;
+        gl_PointSize = clamp(sz * 340.0 / max(-mv.z, 1.0), 0.0, 64.0);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor; varying float vAge; varying float vOn;
+      void main(){
+        float d = length(gl_PointCoord - 0.5);
+        float a = smoothstep(0.5, 0.05, d) * pow(1.0 - vAge, 1.6) * vOn;
+        vec3 col = mix(vec3(2.0), uColor * 1.6, smoothstep(0.0, 0.35, vAge));
+        col = mix(col, uColor * 0.4, smoothstep(0.5, 1.0, vAge));
+        gl_FragColor = vec4(col, a);
+      }`
+  });
+  const pts = new THREE.Points(g, m); pts.frustumCulled = false;
+  trailMats.push(m);
+  return pts;
+}
+/* 光束/弹体拖尾片：local +Y 沿运动方向 */
+function makeStreak(hex) {
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    uniforms: { uColor: { value: new THREE.Color(hex) }, uOpacity: { value: 1 } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+      uniform vec3 uColor; uniform float uOpacity; varying vec2 vUv;
+      void main(){
+        float core = smoothstep(0.5, 0.08, abs(vUv.x - 0.5));
+        float g = pow(vUv.y, 1.4);
+        vec3 col = mix(uColor * 1.5, vec3(2.0), core * 0.6);
+        gl_FragColor = vec4(col, core * g * uOpacity);
+      }`
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), m);
+  mesh.frustumCulled = false;
+  return mesh;
+}
+function makeWave(hex) {
+  const m = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).convertSRGBToLinear(), transparent: true, opacity: 0, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+  const mesh = new THREE.Mesh(new THREE.RingGeometry(0.86, 1.0, 48), m);
+  mesh.frustumCulled = false; mesh.visible = false;
+  return mesh;
+}
+function makeFlash(hex) {
+  const m = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).convertSRGBToLinear().multiplyScalar(2), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), m);
+  mesh.frustumCulled = false; mesh.visible = false;
+  return mesh;
+}
+
+const combat = { missiles: [], bolts: [], kills: [], slash: null };
+CH.missiles.forEach(cfg => {
+  const root = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.ConeGeometry(0.5, 3.2, 8), M.silver);
+  body.rotation.x = -Math.PI / 2; root.add(body);
+  const gl = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), M.glowCyan); gl.position.z = 1.4; root.add(gl);
+  const tr = makeTrail({ length: 12, spread: 0.7, size: 2.4, color: C.trailHero, life: 0.4 });
+  tr.position.z = 1.6; root.add(tr);
+  root.visible = false; scene.add(root);
+  combat.missiles.push({ root, cfg, trail: tr.material });
+});
+CH.bolts.forEach(cfg => {
+  const mesh = makeStreak(C.enemyRed); mesh.visible = false; scene.add(mesh);
+  combat.bolts.push({ mesh, cfg });
+});
+CH.deaths.forEach((d, i) => {
+  const fire = makeBurst({ start: d, life: 1.1, radius: 26, size: 3.5, color: 0xffa04c, count: 110 });
+  const debris = makeBurst({ start: d, life: 2.6, radius: 44, size: 2.2, color: C.rock, count: 60 });
+  const wave = makeWave(C.motherRed);
+  const flash = makeFlash(0xffd9a0);
+  const kpos = foePosAt(i, d, new THREE.Vector3()).clone();
+  fire.position.copy(kpos); debris.position.copy(kpos);
+  scene.add(fire); scene.add(debris); scene.add(wave); scene.add(flash);
+  combat.kills.push({ d, i, fire, debris, wave, flash, pos: kpos });
+});
+combat.slash = makeWave(C.heroGlow);
+combat.slash.geometry = new THREE.RingGeometry(0.8, 1.0, 48, 1, 0, 2.4);
+scene.add(combat.slash);
+
+function foeCentroid(t, out) {
+  out.set(0, 0, 0); let wsum = 0;
+  enemies.forEach((e, i) => {
+    const d = CH.deaths[i];
+    const w = t < d ? 1 : clamp(1 - (t - d) / 0.6, 0, 1);
+    if (w > 0) { out.addScaledVector(e.root.position, w); wsum += w; }
+  });
+  if (wsum === 0) return out.copy(hero.root.position);
+  return out.multiplyScalar(1 / wsum);
+}
+function updateCombat(t) {
+  combat.missiles.forEach(mm => {
+    const [t0, t1, e] = mm.cfg;
+    const u = (t - t0) / (t1 - t0);
+    if (u < 0 || u > 1) { mm.root.visible = false; return; }
+    mm.root.visible = true;
+    const ue = Math.pow(u, 1.6);
+    heroPosAt(t0, _v1); _v1.y += 2;
+    foePosAt(e, t1, _v2);
+    _v3.addVectors(_v1, _v2).multiplyScalar(0.5); _v3.y += 16; _v3.x += (e === 0 ? -14 : 14);
+    const a = 1 - ue;
+    mm.root.position.set(
+      a * a * _v1.x + 2 * a * ue * _v3.x + ue * ue * _v2.x,
+      a * a * _v1.y + 2 * a * ue * _v3.y + ue * ue * _v2.y,
+      a * a * _v1.z + 2 * a * ue * _v3.z + ue * ue * _v2.z
+    );
+    _v3.set(
+      2 * a * (_v3.x - _v1.x) + 2 * ue * (_v2.x - _v3.x),
+      2 * a * (_v3.y - _v1.y) + 2 * ue * (_v2.y - _v3.y),
+      2 * a * (_v3.z - _v1.z) + 2 * ue * (_v2.z - _v3.z)
+    );
+    mm.root.quaternion.setFromUnitVectors(_FWD, _v3.normalize());
+    mm.trail.uniforms.uIntensity.value = 1;
+  });
+  combat.bolts.forEach(bb => {
+    const [fire, e, mx, my] = bb.cfg;
+    const age = t - fire;
+    if (age < 0 || age > CH.boltLife) { bb.mesh.visible = false; return; }
+    bb.mesh.visible = true;
+    foePosAt(e, fire, _v1);
+    heroPosAt(fire, _v2); _v2.x += mx; _v2.y += my;
+    _v3.subVectors(_v2, _v1).normalize();
+    _v1.addScaledVector(_v3, 6);
+    _v1.addScaledVector(_v3, age * 170);
+    bb.mesh.position.copy(_v1);
+    bb.mesh.quaternion.setFromUnitVectors(_UP, _v3);
+    bb.mesh.scale.set(1.6, 16, 1);
+    bb.mesh.material.uniforms.uOpacity.value = 1 - Math.pow(age / CH.boltLife, 3);
+  });
+  combat.kills.forEach(k => {
+    const age = t - k.d;
+    if (age > 0 && age < 0.9) {
+      k.wave.visible = true; k.wave.position.copy(k.pos);
+      k.wave.quaternion.copy(camera.quaternion);
+      k.wave.scale.setScalar(3 + age * 34);
+      k.wave.material.opacity = (1 - age / 0.9) * 0.5;
+    } else k.wave.visible = false;
+    if (age > 0 && age < 0.5) {
+      k.flash.visible = true; k.flash.position.copy(k.pos);
+      k.flash.scale.setScalar(2 + age * 16);
+      k.flash.material.opacity = (1 - age / 0.5) * 0.7;
+    } else k.flash.visible = false;
+  });
+  const sa = t - CH.slash;
+  if (sa > 0 && sa < 0.6) {
+    const sl = combat.slash;
+    sl.visible = true;
+    foePosAt(2, CH.slash, sl.position);
+    sl.quaternion.copy(camera.quaternion);
+    sl.rotateZ(-1.2 + sa * 4);
+    sl.scale.setScalar(5 + sa * 26);
+    sl.material.opacity = (1 - sa / 0.6) * 0.7;
+  } else combat.slash.visible = false;
+}
+
+/* ---------------- 阶段三：母舰交火 + 必杀一击特效（纯 f(t)） ---------------- */
+const combat2 = { mb: [], hb: [], fin: null };
+CH.mBolts.forEach(cfg => { const mesh = makeStreak(C.motherRed); mesh.visible = false; scene.add(mesh); combat2.mb.push({ mesh, cfg }); });
+CH.hBolts.forEach(cfg => { const mesh = makeStreak(C.trailHero); mesh.visible = false; scene.add(mesh); combat2.hb.push({ mesh, cfg }); });
+(function () {
+  const hit = CH.finisher.hit;
+  const cpos = coreAt(hit, new THREE.Vector3()).clone();
+  const slash = makeWave(C.heroGlow); slash.geometry = new THREE.RingGeometry(0.8, 1.0, 48, 1, 0, 2.6); scene.add(slash);
+  const fire = makeBurst({ start: hit, life: 1.6, radius: 60, size: 5, color: 0xffa04c, count: 160 }); fire.position.copy(cpos); scene.add(fire);
+  const debris = makeBurst({ start: hit, life: 8, radius: 90, size: 3, color: C.rock, count: 90 }); debris.position.copy(cpos); scene.add(debris);
+  const w1 = makeWave(C.motherRed), w2 = makeWave(C.heroGlow); scene.add(w1); scene.add(w2);
+  const flash = makeFlash(0xffffff); scene.add(flash);
+  combat2.fin = { hit, cpos, slash, fire, debris, w1, w2, flash };
+})();
+function updateCombat2(t) {
+  combat2.mb.forEach(bb => {
+    const [fire, mx, my] = bb.cfg; const age = t - fire;
+    if (age < 0 || age > CH.boltLife) { bb.mesh.visible = false; return; }
+    bb.mesh.visible = true;
+    motherPosAt(fire, _v1); _v4.set(0, 36, -240).applyAxisAngle(_Y, motherRotAt(fire)); _v1.add(_v4);
+    heroAnyAt(fire, _v2); _v2.x += mx; _v2.y += my;
+    _v3.subVectors(_v2, _v1).normalize();
+    _v1.addScaledVector(_v3, 10); _v1.addScaledVector(_v3, age * 230);
+    bb.mesh.position.copy(_v1);
+    bb.mesh.quaternion.setFromUnitVectors(_UP, _v3);
+    bb.mesh.scale.set(2.4, 26, 1);
+    bb.mesh.material.uniforms.uOpacity.value = 1 - Math.pow(age / CH.boltLife, 3);
+  });
+  combat2.hb.forEach(bb => {
+    const [fire, side] = bb.cfg; const age = t - fire;
+    if (age < 0 || age > 0.8) { bb.mesh.visible = false; return; }
+    bb.mesh.visible = true;
+    heroAnyAt(fire, _v1); _v1.y += 2;
+    coreAt(fire, _v2); _v2.x += side ? 8 : -8; _v2.y += side ? -6 : 6;
+    _v3.subVectors(_v2, _v1).normalize();
+    _v1.addScaledVector(_v3, 4); _v1.addScaledVector(_v3, age * 260);
+    bb.mesh.position.copy(_v1);
+    bb.mesh.quaternion.setFromUnitVectors(_UP, _v3);
+    bb.mesh.scale.set(1.6, 18, 1);
+    bb.mesh.material.uniforms.uOpacity.value = 1 - Math.pow(age / 0.8, 3);
+  });
+  const F = combat2.fin, age = t - F.hit;
+  if (age > 0 && age < 0.7) {
+    F.slash.visible = true; F.slash.position.copy(F.cpos);
+    F.slash.quaternion.copy(camera.quaternion); F.slash.rotateZ(-1.4 + age * 5);
+    F.slash.scale.setScalar(8 + age * 60);
+    F.slash.material.opacity = (1 - age / 0.7) * 0.8;
+  } else F.slash.visible = false;
+  if (age > 0 && age < 1.2) {
+    F.w1.visible = true; F.w1.position.copy(F.cpos);
+    F.w1.quaternion.copy(camera.quaternion);
+    F.w1.scale.setScalar(6 + age * 120);
+    F.w1.material.opacity = (1 - age / 1.2) * 0.6;
+  } else F.w1.visible = false;
+  const a2 = age - 0.15;
+  if (a2 > 0 && a2 < 1.15) {
+    F.w2.visible = true; F.w2.position.copy(F.cpos);
+    F.w2.quaternion.copy(camera.quaternion);
+    F.w2.scale.setScalar(6 + a2 * 140);
+    F.w2.material.opacity = (1 - a2 / 1.15) * 0.5;
+  } else F.w2.visible = false;
+  if (age > 0 && age < 0.6) {
+    F.flash.visible = true; F.flash.position.copy(F.cpos);
+    F.flash.scale.setScalar(4 + age * 60);
+    F.flash.material.opacity = (1 - age / 0.6) * 0.8;
+  } else F.flash.visible = false;
+}
+
+/* ---------------- 全片状态（一切皆由主时间轴 tween 驱动） ---------------- */
+const S = {
+  fx: {
+    bloom: CONFIG.fx.bloomIntensity, aberration: CONFIG.fx.aberration,
+    flash: 0, vignette: CONFIG.fx.vignette
+  },
+  hero: { blade: 0.85, bladeGlow: 1.0, thrust: 1.0, face: 0 },
+  enemies: [{ thrust: 1 }, { thrust: 1 }, { thrust: 1 }],
+  mother: { core: 1.0, thrust: 1.0 }
+};
+
+/* ---------------- 镜头采样（纯 f(t)，硬切 + 确定性抖动） ---------------- */
+const _look = new THREE.Vector3();
+function updateCamera(t) {
+  const shots = CONFIG.camera.shots;
+  let sh = shots[shots.length - 1];
+  for (let i = 0; i < shots.length; i++) {
+    if (t >= shots[i].t0 && t < shots[i].t1) { sh = shots[i]; break; }
+  }
+  const u = clamp((t - sh.t0) / (sh.t1 - sh.t0), 0, 1);
+  const e = sh.ease === 'power' ? easePow(u) : smooth(u);
+  const amp = (sh.shake || 0) * CONFIG.camera.shakeBase;
+  camera.position.set(
+    lerp(sh.from.pos[0], sh.to.pos[0], e) + shakeNoise(t, 1) * amp,
+    lerp(sh.from.pos[1], sh.to.pos[1], e) + shakeNoise(t, 2) * amp,
+    lerp(sh.from.pos[2], sh.to.pos[2], e) + shakeNoise(t, 3) * amp * 0.6
+  );
+  if (sh.track) {
+    if (sh.track === 'hero') _look.copy(hero.root.position);
+    else if (sh.track === 'foe') foeCentroid(t, _look);
+    else if (sh.track === 'mother') _look.copy(mother.root.position);
+    else if (sh.track === 'core') coreAt(t, _look);
+    else if (sh.track === 'duel') { coreAt(t, _look); _look.add(hero.root.position).multiplyScalar(0.5); }
+    else { foeCentroid(t, _look); _look.add(hero.root.position).multiplyScalar(0.5); }
+    _look.y += 3;
+    _look.x += shakeNoise(t, 4) * amp * 0.4;
+    _look.y += shakeNoise(t, 5) * amp * 0.4;
+  } else {
+    _look.set(
+      lerp(sh.from.look[0], sh.to.look[0], e) + shakeNoise(t, 4) * amp * 0.4,
+      lerp(sh.from.look[1], sh.to.look[1], e) + shakeNoise(t, 5) * amp * 0.4,
+      lerp(sh.from.look[2], sh.to.look[2], e)
+    );
+  }
+  camera.lookAt(_look);
+  const fov = lerp(sh.from.fov, sh.to.fov, e);
+  if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+}
+
+/* ---------------- 五幕独立函数（阶段一：资产巡礼版，后续阶段替换编排） ---------------- */
+/* 冲击闪白用解析包络（纯 f(t)）：GSAP fromTo 在反向跨越时会残留 from 值，破坏 seek */
+const FLASH_EVENTS = [];
+function flashEvent(t, amp, dur) { FLASH_EVENTS.push({ t, amp, dur }); }
+function act1(tl, a) {
+  flashEvent(a.start, 0.4, 1.0);
+  tl.fromTo(S.fx, { bloom: 1.3 }, { bloom: CONFIG.fx.bloomIntensity, duration: 3, ease: 'sine.out' }, a.start);
+  /* 突围冲刺 → 被围 → 规避滚转 */
+  tl.fromTo(S.hero, { thrust: 2.2 }, { thrust: 1.0, duration: 3, ease: 'sine.out' }, a.start);
+  tl.to(S.hero, { thrust: 1.8, duration: 0.5, yoyo: true, repeat: 1, ease: 'power2.out' }, a.start + 8.6);
+  tl.to(S.fx, { aberration: CONFIG.fx.aberration * 2.0, duration: 0.3, yoyo: true, repeat: 1, ease: 'power2.out' }, a.start + 9.0);
+  tl.to(S.fx, { bloom: 0.85, duration: 0.4, yoyo: true, repeat: 1, ease: 'sine.out' }, a.start + 8.2);
+}
+function act2(tl, a) {
+  /* 导弹齐射 → 两次击坠 → 光刃斩击破阵 */
+  tl.to(S.hero, { thrust: 1.9, duration: 0.6, yoyo: true, repeat: 1, ease: 'power2.out' }, a.start + 0.4);
+  tl.to(S.hero, { bladeGlow: 1.5, duration: 2, ease: 'sine.inOut' }, a.start + 2);
+  flashEvent(a.start + 3.6, 0.18, 0.6);
+  flashEvent(a.start + 5.6, 0.18, 0.6);
+  tl.to(S.hero, { thrust: 2.4, duration: 1.2, ease: 'power2.in' }, a.start + 6.5);
+  tl.to(S.hero, { blade: 1.25, bladeGlow: 2.0, duration: 0.5, ease: 'power2.out' }, a.start + 7.8);
+  flashEvent(a.start + 8.2, 0.3, 0.7);
+  tl.to(S.fx, { aberration: CONFIG.fx.aberration * 2.4, duration: 0.4, yoyo: true, repeat: 1, ease: 'power2.out' }, a.start + 8.2);
+  tl.to(S.hero, { blade: 0.85, bladeGlow: 1.0, thrust: 1.0, duration: 2.5, ease: 'sine.out' }, a.start + 9.5);
+}
+function act3(tl, a) {
+  tl.to(S.mother, { core: 1.7, duration: 3, ease: 'sine.inOut' }, a.start + 1);
+  tl.to(S.fx, { bloom: 1.0, duration: 2, ease: 'sine.inOut' }, a.start);
+  tl.to(S.hero, { thrust: 1.8, duration: 0.4, yoyo: true, repeat: 1, ease: 'power2.out' }, a.start + 7);
+  tl.to(S.hero, { thrust: 1.8, duration: 0.4, yoyo: true, repeat: 1, ease: 'power2.out' }, a.start + 10);
+  tl.to(S.fx, { aberration: CONFIG.fx.aberration * 2.0, duration: 0.3, yoyo: true, repeat: 1, ease: 'power2.out' }, a.start + 7.5);
+  tl.to(S.fx, { aberration: CONFIG.fx.aberration * 2.0, duration: 0.3, yoyo: true, repeat: 1, ease: 'power2.out' }, a.start + 10.5);
+}
+function act4(tl, a) {
+  tl.to(S.hero, { blade: 1.6, bladeGlow: 3.0, duration: 4.5, ease: 'power2.in' }, a.start);
+  tl.to(S.hero, { thrust: 2.6, duration: 1.0, ease: 'power2.in' }, a.start + 5);
+  flashEvent(a.start + 6.5, 0.5, 0.9);
+  tl.to(S.fx, { bloom: 1.4, duration: 0.3, yoyo: true, repeat: 1, ease: 'power2.out' }, a.start + 6.5);
+  tl.to(S.fx, { aberration: CONFIG.fx.aberration * 3, duration: 0.4, yoyo: true, repeat: 1, ease: 'power2.out' }, a.start + 6.5);
+  tl.to(S.mother, { core: 0.15, duration: 1.2, ease: 'power2.out' }, a.start + 6.5);
+  tl.to(S.hero, { blade: 1.0, bladeGlow: 1.25, thrust: 1.0, duration: 3, ease: 'sine.out' }, a.start + 8);
+}
+function act5(tl, a) {
+  tl.to(S.hero, { face: 2.7, duration: 2.2, ease: 'power2.inOut' }, a.start);
+  tl.to(S.hero, { blade: 1.0, bladeGlow: 1.25, duration: 2, ease: 'sine.out' }, a.start);
+  tl.to(S.fx, { vignette: 0.56, bloom: 0.95, duration: 2.5, ease: 'sine.inOut' }, a.start);
+}
+const ACT_FNS = { act1, act2, act3, act4, act5 };
+
+gsap.defaults({ lazy: false });
+const tl = gsap.timeline({
+  paused: true,
+  onComplete: () => { tl.pause(); syncPlayUI(); },
+  onReverseComplete: () => { tl.pause(); syncPlayUI(); }
+});
+CONFIG.acts.forEach(a => ACT_FNS[a.fn](tl, a));
+tl.to({}, { duration: CONFIG.duration }, 0);
+
+/* ---------------- 每帧更新：全部状态 = f(t) ---------------- */
+function update(t) {
+  let fl = 0;
+  for (const e of FLASH_EVENTS) { const p = (t - e.t) / e.dur; if (p >= 0 && p < 1) fl += e.amp * (1 - p) * (1 - p); }
+  S.fx.flash = fl;
+  const ms = CONFIG.acts[2].start;
+  S.mother.thrust = t < ms ? 1 : 1 + 0.6 * (1 - Math.sin(clamp((t - ms) / 6, 0, 1) * Math.PI / 2));
+  skyMat.uniforms.uTime.value = t;
+  starMat.uniforms.uTime.value = t;
+  dustMat.uniforms.uTime.value = t;
+  earthUniforms.uTime.value = t;
+  cloudMat.uniforms.uTime.value = t;
+  earthMesh.rotation.y = 0.4 + t * 0.004;
+  cloudMesh.rotation.y = 0.4 + t * 0.0052;
+  updateRocks(t);
+
+  /* 曙光号：幕一~幕二沿关键帧飞行，其余时间待机 */
+  const h = hero;
+  const cw = t < 54 ? 1 - smooth(clamp((t - 52) / 2, 0, 1)) : 0;
+  if (t < 54) {
+    const keys = t < 26 ? CH.hero : CH.hero2;
+    keyPos(keys, t, _v1); heroRotAt(keys, t, _v2);
+    h.root.position.set(_v1.x, _v1.y + Math.sin(t * 0.85) * 0.3, _v1.z);
+    h.root.rotation.set(_v2.x, _v2.y + Math.sin(t * 0.23) * 0.04, _v2.z);
+  } else {
+    h.root.position.set(CONFIG.world.heroPos[0], CONFIG.world.heroPos[1] + Math.sin(t * 0.85) * 0.55, CONFIG.world.heroPos[2]);
+    h.root.rotation.set(0, S.hero.face + Math.sin(t * 0.23) * 0.06, Math.sin(t * 0.5) * 0.02);
+  }
+  h.hips.rotation.x = Math.sin(t * 0.7) * 0.02;
+  h.torso.rotation.y = Math.sin(t * 0.4) * 0.045;
+  h.head.rotation.y = Math.sin(t * 0.6) * 0.12;
+  h.head.rotation.x = Math.sin(t * 0.83) * 0.04;
+  h.armL.sh.rotation.set(0.1 + Math.sin(t * 0.72) * 0.03, 0, 0.16 + Math.sin(t * 0.75) * 0.04);
+  h.armR.sh.rotation.set(-0.42 + Math.sin(t * 0.6) * 0.03, 0, -0.18 - Math.sin(t * 0.7 + 1) * 0.04);
+  h.armL.el.rotation.x = -0.32 + Math.sin(t * 0.8) * 0.03;
+  h.armR.el.rotation.x = -0.55;
+  h.legL.th.rotation.x = 0.1 + Math.sin(t * 0.8) * 0.03;
+  h.legR.th.rotation.x = -0.06 + Math.sin(t * 0.8 + 2) * 0.03;
+  h.legL.kn.rotation.x = -0.16; h.legR.kn.rotation.x = -0.1;
+  if (cw > 0) {
+    h.legL.th.rotation.x += -0.55 * cw; h.legR.th.rotation.x += -0.45 * cw;
+    h.legL.kn.rotation.x += 0.7 * cw; h.legR.kn.rotation.x += 0.6 * cw;
+    h.armL.sh.rotation.x += -0.5 * cw; h.armL.el.rotation.x += -0.4 * cw;
+    h.armR.sh.rotation.x += -0.3 * cw;
+    h.torso.rotation.x = 0.12 * cw;
+  }
+  h.bladeGroup.rotation.set(-0.45, 0, -0.55);
+  const sw = t - CH.slash;
+  if (sw > -0.3 && sw < 0.5) {
+    const k = smooth(clamp((sw + 0.3) / 0.8, 0, 1));
+    h.armR.sh.rotation.z = -0.18 - 1.6 * k;
+    h.armR.sh.rotation.x = -0.42 - 0.8 * Math.sin(k * Math.PI);
+    h.bladeGroup.rotation.z = -0.55 + 1.4 * k;
+  }
+  const sw2 = t - CH.finisher.dash;
+  if (sw2 > -0.4 && sw2 < 0.8) {
+    const k = smooth(clamp((sw2 + 0.4) / 1.2, 0, 1));
+    h.armR.sh.rotation.z = -0.18 - 2.0 * k;
+    h.armR.sh.rotation.x = -0.42 - 1.2 * Math.sin(k * Math.PI);
+    h.bladeGroup.rotation.z = -0.55 + 1.8 * k;
+    h.bladeGroup.rotation.x = -0.45 - 0.6 * Math.sin(k * Math.PI);
+  }
+  h.bladeGroup.scale.y = Math.max(S.hero.blade, 0.001) * (0.97 + 0.03 * Math.sin(t * 8.5));
+  h.bladeMat.uniforms.uTime.value = t;
+  h.bladeMat.uniforms.uGlow.value = S.hero.bladeGlow * CONFIG.fx.bladeGlow;
+  M.glowCyan.color.setHex(C.heroGlow).convertSRGBToLinear().multiplyScalar(1.5 + 0.3 * Math.sin(t * 3.1));
+  h.trailMats.forEach(m => { m.uniforms.uIntensity.value = S.hero.thrust * (0.85 + 0.15 * Math.sin(t * 21)); });
+
+  /* 黑潮编队：幕一收拢包围，被击坠后隐藏（纯 f(t)） */
+  enemies.forEach((e, i) => {
+    if (t >= CH.deaths[i]) { e.root.visible = false; return; }
+    e.root.visible = true;
+    foePosAt(i, t, _v1);
+    e.root.position.copy(_v1);
+    heroPosAt(t, _v2);
+    _v3.subVectors(_v2, _v1);
+    const yaw = Math.atan2(-_v3.x, -_v3.z);
+    const pitch = Math.atan2(_v3.y, Math.hypot(_v3.x, _v3.z)) * 0.4;
+    e.root.rotation.set(pitch, yaw, 0.15 * Math.sin(t * 0.7 + e.phase));
+    e.trails.forEach(m => { m.uniforms.uIntensity.value = S.enemies[i].thrust * (0.85 + 0.15 * Math.sin(t * 19 + i)); });
+  });
+
+  /* 母舰：幕三压近对峙，必杀后重创漂移 */
+  if (t >= 26) {
+    motherPosAt(t, _v1);
+    mother.root.position.set(_v1.x, _v1.y + Math.sin(t * 0.3) * 2, _v1.z);
+    mother.root.rotation.y = motherRotAt(t) + Math.sin(t * 0.08) * 0.01;
+  } else {
+    mother.root.position.copy(mother.basePos);
+    mother.root.position.y += Math.sin(t * 0.3) * 4;
+    mother.root.rotation.y = mother.baseRotY + Math.sin(t * 0.08) * 0.015;
+  }
+  const dmg = Math.max(0, t - CH.finisher.hit);
+  mother.root.rotation.z = Math.sin(t * 0.11) * 0.008 + dmg * 0.02;
+  mother.root.rotation.x = dmg * 0.008;
+  const pulse = 1 + 0.1 * Math.sin(t * 2.2);
+  mother.core.scale.setScalar(pulse);
+  mother.core.material.color.setHex(C.motherCore).convertSRGBToLinear().multiplyScalar((1.25 + 0.4 * Math.sin(t * 2.2)) * S.mother.core);
+  mother.ring1.rotation.z = Math.min(t, CH.finisher.hit) * 0.55;
+  mother.ring2.rotation.z = -Math.min(t, CH.finisher.hit) * 0.38;
+  mother.ring2.rotation.y = 0.4;
+  mother.trails.forEach(m => { m.uniforms.uIntensity.value = S.mother.thrust * (0.9 + 0.1 * Math.sin(t * 13)); });
+
+  trailMats.forEach(m => { m.uniforms.uTime.value = t; });
+
+  updateCamera(t);
+  updateCombat(t);
+  updateCombat2(t);
+  sunGroup.quaternion.copy(camera.quaternion);
+  renderFrame(t, S.fx);
+}
+
+/* ---------------- HUD / 控制条 / 主循环 ---------------- */
+const $ = id => document.getElementById(id);
+const elFill = $('fill'), elThumb = $('thumb'), elTrack = $('track');
+const elTC = $('tc'), elTCCur = $('tc-cur'), elFPS = $('fps');
+const elChip = $('act-chip'), elActEn = $('act-en');
+const btnPlay = $('btn-play'), btnReplay = $('btn-replay'), btnRev = $('btn-rev');
+const icPlay = $('ic-play'), icPause = $('ic-pause');
+const elSub = $('subtitle'), elFin = $('fin-card'), elTitle = $('title-card');
+$('fin-ja').textContent = CONFIG.cards.finisher.ja;
+$('fin-zh').textContent = CONFIG.cards.finisher.zh;
+$('title-zh').textContent = CONFIG.cards.title.zh;
+$('title-en').textContent = CONFIG.cards.title.en;
+$('title-sub').textContent = CONFIG.cards.title.sub;
+let lastSubText = '';
+
+/* 幕标签 + 进度刻度 */
+const actLabelEls = [];
+CONFIG.acts.forEach(a => {
+  const sp = document.createElement('span');
+  sp.textContent = a.name;
+  sp.title = fmtShort(a.start) + ' – ' + fmtShort(a.end);
+  sp.addEventListener('click', () => { tl.time(a.start + 0.001); syncPlayUI(); });
+  $('act-labels').appendChild(sp);
+  actLabelEls.push(sp);
+  if (a.start > 0) {
+    const tick = document.createElement('div');
+    tick.className = 'tick';
+    tick.style.left = (a.start / CONFIG.duration * 100) + '%';
+    elTrack.appendChild(tick);
+  }
+});
+
+function syncPlayUI() {
+  const playing = !tl.paused();
+  icPlay.style.display = playing ? 'none' : 'block';
+  icPause.style.display = playing ? 'block' : 'none';
+  btnRev.classList.toggle('on', tl.reversed());
+}
+function togglePlay() {
+  if (tl.paused()) {
+    if (!tl.reversed() && tl.time() >= CONFIG.duration - 0.01) tl.time(0);
+    if (tl.reversed()) tl.reverse(); else tl.play();
+  } else tl.pause();
+  syncPlayUI();
+}
+function replay() { tl.reversed(false).timeScale(1).time(0).play(); syncPlayUI(); }
+function toggleReverse() {
+  if (!tl.reversed()) {
+    if (tl.time() < 0.05) tl.time(CONFIG.duration);
+    tl.reverse();
+  } else {
+    tl.play();
+  }
+  syncPlayUI();
+}
+btnPlay.addEventListener('click', () => { togglePlay(); btnPlay.blur(); });
+btnReplay.addEventListener('click', () => { replay(); btnReplay.blur(); });
+btnRev.addEventListener('click', () => { toggleReverse(); btnRev.blur(); });
+
+/* 进度条拖动（拖动期间暂停，松手恢复原播放态） */
+let dragging = false, wasPlaying = false, wasReversed = false;
+function seekFromEvent(e) {
+  const r = elTrack.getBoundingClientRect();
+  const frac = clamp((e.clientX - r.left) / r.width, 0, 1);
+  tl.time(frac * CONFIG.duration);
+}
+elTrack.addEventListener('pointerdown', e => {
+  dragging = true; wasPlaying = !tl.paused(); wasReversed = tl.reversed();
+  tl.pause();
+  elTrack.setPointerCapture(e.pointerId);
+  seekFromEvent(e); syncPlayUI();
+});
+elTrack.addEventListener('pointermove', e => { if (dragging) seekFromEvent(e); });
+elTrack.addEventListener('pointerup', e => {
+  if (!dragging) return;
+  dragging = false;
+  if (wasPlaying) { if (wasReversed) tl.reverse(); else tl.play(); }
+  syncPlayUI();
+});
+elTrack.addEventListener('pointercancel', () => {
+  if (!dragging) return;
+  dragging = false;
+  if (wasPlaying) { if (wasReversed) tl.reverse(); else tl.play(); }
+  syncPlayUI();
+});
+
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  else if (e.code === 'KeyR') replay();
+  else if (e.code === 'KeyV') toggleReverse();
+  else if (e.code === 'KeyM') toggleMute();
+  else if (e.code === 'ArrowLeft') { tl.time(clamp(tl.time() - 2, 0, CONFIG.duration)); }
+  else if (e.code === 'ArrowRight') { tl.time(clamp(tl.time() + 2, 0, CONFIG.duration)); }
+  else if (e.code === 'Home') tl.time(0);
+  else if (e.code === 'End') tl.time(CONFIG.duration);
+});
+
+/* ---------------- WebAudio：程序化 BGM+SFX 离线烘焙整轨 ----------------
+   音频与画面同源：整轨是 t 的函数，播放=从 tl.time() 起播缓冲，
+   倒放=反相缓冲，暂停/拖动=停源（自然静音），seek=重新对齐。 */
+const AU = { ctx: null, master: null, buf: null, rbuf: null, src: null, ready: false, muted: false, anchorCtx: 0, anchorT: 0, dir: 1 };
+function audioInit() {
+  if (AU.ctx) return;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  AU.ctx = new Ctx();
+  AU.master = AU.ctx.createGain();
+  AU.master.gain.value = AU.muted ? 0 : CONFIG.audio.master;
+  AU.master.connect(AU.ctx.destination);
+  ensureBake();
+}
+let bakeP = null;
+function ensureBake() {
+  if (!bakeP) bakeP = bakeSoundtrack().then(buf => { AU.buf = buf; AU.ready = true; });
+  return bakeP;
+}
+ensureBake();
+function unlockAudio() { audioInit(); if (AU.ctx && AU.ctx.state === 'suspended') AU.ctx.resume(); }
+window.addEventListener('pointerdown', unlockAudio);
+window.addEventListener('keydown', unlockAudio);
+function toggleMute() {
+  AU.muted = !AU.muted;
+  if (AU.master) AU.master.gain.value = AU.muted ? 0 : CONFIG.audio.master;
+  $('ic-snd').style.display = AU.muted ? 'none' : 'block';
+  $('ic-mut').style.display = AU.muted ? 'block' : 'none';
+  $('btn-mute').classList.toggle('on', AU.muted);
+  $('ic-snd2').style.display = AU.muted ? 'none' : 'block';
+  $('ic-mut2').style.display = AU.muted ? 'block' : 'none';
+  $('hud-snd').classList.toggle('on', AU.muted);
+}
+$('btn-mute').addEventListener('click', () => { toggleMute(); $('btn-mute').blur(); });
+$('hud-snd').addEventListener('click', () => { unlockAudio(); toggleMute(); });
+
+function bakeSoundtrack() {
+  const sr = 44100, dur = CONFIG.duration, A = CONFIG.audio, CH = CONFIG.choreo;
+  const oc = new OfflineAudioContext(1, Math.ceil(dur * sr), sr);
+  const music = oc.createGain(); music.gain.value = A.music; music.connect(oc.destination);
+  const sfx = oc.createGain(); sfx.gain.value = A.sfx; sfx.connect(oc.destination);
+  music.gain.setValueAtTime(A.music, 57.5);
+  music.gain.linearRampToValueAtTime(0.0001, 59.9);
+  const nb = oc.createBuffer(1, sr * 2, sr);
+  const nd = nb.getChannelData(0); let ns = 987654321;
+  for (let i = 0; i < nd.length; i++) { ns = (ns * 16807) % 2147483647; nd[i] = (ns / 2147483647) * 2 - 1; }
+  function tone(dest, type, f0, f1, t0, t1, vol, atk) {
+    const o = oc.createOscillator(), g = oc.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t0);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(f1, 1), t1);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + (atk || 0.01));
+    g.gain.exponentialRampToValueAtTime(0.0001, t1);
+    o.connect(g); g.connect(dest); o.start(t0); o.stop(t1 + 0.05);
+  }
+  function noise(dest, t0, t1, vol, fType, f0, f1, q) {
+    const s = oc.createBufferSource(); s.buffer = nb; s.loop = true;
+    const f = oc.createBiquadFilter(); f.type = fType; f.Q.value = q || 0.8;
+    f.frequency.setValueAtTime(f0, t0);
+    if (f1) f.frequency.exponentialRampToValueAtTime(f1, t1);
+    const g = oc.createGain();
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t1);
+    s.connect(f); f.connect(g); g.connect(dest); s.start(t0); s.stop(t1 + 0.05);
+  }
+  function padTone(f, t0, t1, vol, cut) {
+    const o = oc.createOscillator(), g = oc.createGain(), fl = oc.createBiquadFilter();
+    o.type = 'sawtooth'; o.frequency.value = f;
+    fl.type = 'lowpass'; fl.frequency.value = cut;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.5);
+    g.gain.setValueAtTime(vol, t1 - 0.4);
+    g.gain.linearRampToValueAtTime(0, t1);
+    o.connect(fl); fl.connect(g); g.connect(music); o.start(t0); o.stop(t1 + 0.05);
+  }
+  const kick = (t, v) => { tone(music, 'sine', 150, 40, t, t + 0.22, v, 0.004); noise(music, t, t + 0.03, v * 0.18, 'highpass', 2000); };
+  const hat = (t, v) => noise(music, t, t + 0.05, v, 'highpass', 6500);
+  const snare = (t, v) => { noise(music, t, t + 0.18, v, 'bandpass', 1800, 0, 1.2); tone(music, 'triangle', 220, 160, t, t + 0.1, v * 0.5); };
+  const bass = (t, f, v) => tone(music, 'square', f, f, t, t + 0.2, v, 0.008);
+  const laser = (t, f0, f1, v) => tone(sfx, 'square', f0, f1, t, t + 0.14, v, 0.005);
+  const whoosh = (t, d, f0, f1, v) => noise(sfx, t, t + d, v, 'bandpass', f0, f1, 1.2);
+  const boom = (t, v) => { noise(sfx, t, t + 0.9, v, 'lowpass', 5000, 120); tone(sfx, 'sine', 90, 35, t, t + 0.6, v * 0.9, 0.005); };
+  const CHORDS = [
+    [146.83, 174.61, 220.00],
+    [116.54, 146.83, 174.61],
+    [98.00, 116.54, 146.83],
+    [110.00, 138.59, 164.81]
+  ];
+  const beat = 60 / A.bpm;
+  for (let bar = 0; bar * 4 * beat < 54; bar++) {
+    const t0 = bar * 4 * beat, ch = CHORDS[bar % 4];
+    const sec = t0 < 12 ? 1 : t0 < 26 ? 2 : t0 < 42 ? 3 : t0 < 48.5 ? 4 : 5;
+    ch.forEach(f => padTone(f, t0, t0 + 4 * beat, sec === 1 ? 0.05 : 0.04, 500 + sec * 130));
+    if (sec >= 2) for (let b = 0; b < 4; b++) {
+      const kt = t0 + b * beat;
+      if (sec === 4 && kt >= 47.2) continue;
+      if (sec === 5 && b % 2 === 1) continue;
+      kick(kt, sec >= 3 ? 0.85 : 0.7);
+    }
+    if (sec >= 2) for (let e = 0; e < 8; e++) hat(t0 + e * beat / 2, sec >= 3 ? 0.14 : 0.1);
+    if (sec >= 3 && sec <= 5) { snare(t0 + beat, 0.26); snare(t0 + 3 * beat, 0.26); }
+    if (sec >= 2) for (let e = 0; e < 8; e++) bass(t0 + e * beat / 2, ch[e % 3] / 2, 0.16);
+    if (sec === 3) ch.forEach(f => tone(music, 'triangle', f * 2, f * 2, t0, t0 + 0.4, 0.09, 0.01));
+  }
+  /* 主音动机：斩击 / 必杀命中 */
+  [440, 587.33, 523.25, 440].forEach((f, i) => tone(music, 'triangle', f, f, 20.2 + i * 0.3, 20.5 + i * 0.3, 0.26, 0.01));
+  [587.33, 698.46, 880, 1174.66].forEach((f, i) => {
+    tone(music, 'sawtooth', f, f, 48.7 + i * 0.3, 49.4 + i * 0.3, 0.14, 0.01);
+    tone(music, 'triangle', f, f, 48.7 + i * 0.3, 49.6 + i * 0.3, 0.24, 0.01);
+  });
+  /* 蓄力上升 42→48.5 */
+  (function () {
+    const t0 = CH.finisher.charge, t1 = CH.finisher.hit;
+    const s = oc.createBufferSource(); s.buffer = nb; s.loop = true;
+    const f = oc.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.4;
+    f.frequency.setValueAtTime(300, t0); f.frequency.exponentialRampToValueAtTime(6000, t1);
+    const g = oc.createGain();
+    g.gain.setValueAtTime(0.02, t0); g.gain.exponentialRampToValueAtTime(0.35, t1);
+    g.gain.linearRampToValueAtTime(0, t1 + 0.05);
+    s.connect(f); f.connect(g); g.connect(sfx); s.start(t0); s.stop(t1 + 0.1);
+    const o = oc.createOscillator(), og = oc.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(110, t0); o.frequency.exponentialRampToValueAtTime(880, t1);
+    og.gain.setValueAtTime(0.001, t0); og.gain.exponentialRampToValueAtTime(0.12, t1);
+    og.gain.linearRampToValueAtTime(0, t1 + 0.05);
+    o.connect(og); og.connect(sfx); o.start(t0); o.stop(t1 + 0.1);
+  })();
+  /* 定格：钟 + 解决垫 */
+  tone(music, 'sine', 1174.66, 1174.66, 54, 56.5, 0.2, 0.005);
+  tone(music, 'sine', 1760, 1760, 54, 55.6, 0.08, 0.005);
+  [293.66, 349.23, 440, 659.25].forEach(f => padTone(f, 54, 59.8, 0.06, 1200));
+  /* SFX 事件（与画面编排同源 CONFIG.choreo） */
+  CH.bolts.forEach(b => laser(b[0], 500, 160, 0.18));
+  CH.mBolts.forEach(b => laser(b[0], 420, 130, 0.2));
+  CH.hBolts.forEach(b => laser(b[0], 900, 240, 0.2));
+  CH.missiles.forEach(m => whoosh(m[0], 0.5, 400, 2500, 0.32));
+  CH.deaths.forEach(d => boom(d, 0.65));
+  whoosh(CH.slash, 0.35, 800, 7000, 0.45);
+  tone(sfx, 'triangle', 1200, 2600, CH.slash, CH.slash + 0.18, 0.16, 0.005);
+  whoosh(CH.finisher.dash, 0.6, 600, 4000, 0.45);
+  boom(CH.finisher.hit, 0.95);
+  noise(sfx, CH.finisher.hit, CH.finisher.hit + 1.4, 0.28, 'highpass', 3000);
+  return oc.startRendering();
+}
+function reverseBuffer(buf) {
+  const r = AU.ctx.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate);
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const a = buf.getChannelData(c), b = r.getChannelData(c);
+    for (let i = 0, n = a.length; i < n; i++) b[i] = a[n - 1 - i];
+  }
+  return r;
+}
+function audioStop() { if (AU.src) { try { AU.src.stop(); } catch (e) {} AU.src = null; } }
+function audioSync() {
+  if (!AU.ready || !AU.ctx) return;
+  if (tl.paused() || dragging) { audioStop(); return; }
+  const t = tl.time(), rev = tl.reversed();
+  const off = rev ? CONFIG.duration - t : t;
+  if (off <= 0.02 || off >= CONFIG.duration - 0.02) { audioStop(); return; }
+  if (AU.src && AU.dir === (rev ? -1 : 1)) {
+    const elapsed = AU.ctx.currentTime - AU.anchorCtx;
+    const expect = rev ? AU.anchorT - t : t - AU.anchorT;
+    if (Math.abs(elapsed - expect) < 0.12) return;
+  }
+  audioStop();
+  const buf = rev ? (AU.rbuf || (AU.rbuf = reverseBuffer(AU.buf))) : AU.buf;
+  const s = AU.ctx.createBufferSource(); s.buffer = buf; s.connect(AU.master);
+  s.start(0, off);
+  AU.src = s; AU.dir = rev ? -1 : 1; AU.anchorCtx = AU.ctx.currentTime; AU.anchorT = t;
+}
+
+/* HUD 覆盖层随画幅等比缩放 */
+const frame = $('frame'), wrap = $('stage-wrap');
+const overlay = document.createElement('div');
+overlay.style.cssText = 'position:absolute;top:0;left:0;width:' + W + 'px;height:' + H + 'px;transform-origin:0 0;pointer-events:none;';
+frame.querySelectorAll('.hud, .corner, #veil').forEach(n => overlay.appendChild(n));
+frame.appendChild(overlay);
+function fit() {
+  const pad = 18;
+  const aw = wrap.clientWidth - pad, ah = wrap.clientHeight - pad;
+  const s = Math.max(Math.min(aw / W, ah / H), 0.05);
+  canvas.style.width = (W * s) + 'px';
+  canvas.style.height = (H * s) + 'px';
+  frame.style.width = (W * s) + 'px';
+  frame.style.height = (H * s) + 'px';
+  overlay.style.transform = 'scale(' + s + ')';
+}
+window.addEventListener('resize', fit);
+fit();
+
+/* HUD 同步 */
+let lastActId = -1, fpsEMA = 60, lastNow = performance.now(), frameCount = 0;
+function syncHUD(t) {
+  elFill.style.width = (t / CONFIG.duration * 100) + '%';
+  elThumb.style.left = (t / CONFIG.duration * 100) + '%';
+  elTC.textContent = fmtTC(t);
+  elTCCur.textContent = fmtShort(t);
+  let act = CONFIG.acts[CONFIG.acts.length - 1];
+  for (let i = 0; i < CONFIG.acts.length; i++) {
+    if (t >= CONFIG.acts[i].start && t < CONFIG.acts[i].end) { act = CONFIG.acts[i]; break; }
+  }
+  if (act.id !== lastActId) {
+    lastActId = act.id;
+    elChip.textContent = act.name;
+    elActEn.textContent = act.en;
+    actLabelEls.forEach((el, i) => el.classList.toggle('cur', CONFIG.acts[i].id === act.id));
+  }
+  /* 字幕 / 必杀卡 / 定格标题：纯 f(t) */
+  const fade = 0.35;
+  let sub = null;
+  for (const s of CONFIG.subtitles) if (t >= s.t0 && t < s.t1) { sub = s; break; }
+  if (sub) {
+    if (sub.text !== lastSubText) { lastSubText = sub.text; elSub.textContent = sub.text; }
+    elSub.style.opacity = clamp(Math.min((t - sub.t0) / fade, (sub.t1 - t) / fade), 0, 1).toFixed(3);
+  } else elSub.style.opacity = 0;
+  const fc = CONFIG.cards.finisher;
+  if (t >= fc.t0 && t < fc.t1) {
+    const p = t - fc.t0;
+    elFin.style.opacity = (Math.min(p / 0.12, 1) * clamp((fc.t1 - t) / 0.4, 0, 1)).toFixed(3);
+    elFin.style.transform = 'scale(' + (1.12 - 0.12 * Math.min(p / 0.22, 1)).toFixed(3) + ')';
+  } else elFin.style.opacity = 0;
+  const tcard = CONFIG.cards.title;
+  if (t >= tcard.t0) {
+    const p = clamp((t - tcard.t0) / 1.2, 0, 1);
+    elTitle.style.opacity = (p * p * (3 - 2 * p)).toFixed(3);
+    elTitle.style.transform = 'translateY(' + ((1 - p) * 24).toFixed(1) + 'px)';
+  } else elTitle.style.opacity = 0;
+  const now = performance.now();
+  const dt = now - lastNow; lastNow = now;
+  if (dt > 0 && dt < 500) fpsEMA += (1000 / dt - fpsEMA) * 0.06;
+  if (++frameCount % 12 === 0) elFPS.textContent = Math.round(clamp(fpsEMA, 0, 240));
+}
+
+/* 主循环：唯一 rAF 驱动（gsap.ticker），读 tl.time() → 全量更新 */
+let booted = false;
+gsap.ticker.add(() => {
+  const t = tl.time();
+  update(t);
+  syncHUD(t);
+  audioSync();
+  if (!booted) {
+    booted = true;
+    $('veil').classList.add('gone');
+  }
+});
+
+/* 起飞（支持 #t=秒 深链定位到某一帧，便于分享与逐幕检查） */
+tl.time(0);
+syncPlayUI();
+const _deep = location.hash.match(/t=([\d.]+)/);
+if (_deep) { tl.time(clamp(parseFloat(_deep[1]), 0, CONFIG.duration)); tl.pause(); }
+else tl.play();
+syncPlayUI();
+window.__film = { tl, S, CONFIG, seek: t => tl.time(clamp(t, 0, CONFIG.duration)),
+  dbg: { scene, camera, renderer, compositeMat, skyMat, sunGroup, earthGroup, beltGroup, M, hero, mother, update } };
+</script>
+</body>
+</html>

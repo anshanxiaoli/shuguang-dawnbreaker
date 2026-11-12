@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>曙光号 宇宙空戦</title>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#e6e9f0;--panel:#fff;--ink:#11151d;--dim:#5b6475;--line:#c9cfdb;--hot:#e0243a;--cool:#1f6bff;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#06080d;--panel:#10141d;--ink:#e8ecf5;--dim:#8a93a6;--line:#252c3a;--hot:#ff4257;--cool:#5b9bff}}
+:root[data-theme="dark"]{--bg:#06080d;--panel:#10141d;--ink:#e8ecf5;--dim:#8a93a6;--line:#252c3a;--hot:#ff4257;--cool:#5b9bff}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font:500 14px/1.5 "Zen Kaku Gothic New","PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+#app{max-width:1280px;margin:0 auto;padding:16px;display:grid;gap:12px}
+#stage{position:relative;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden}
+#cv{width:100%;height:100%;display:block}
+#hud{position:absolute;left:12px;top:10px;color:#fff;font-weight:900;font-size:13px;text-shadow:0 1px 3px #000;pointer-events:none}
+#tag{position:absolute;right:12px;top:10px;color:#fff;opacity:.6;font-size:12px;pointer-events:none}
+#chips{display:flex;gap:8px;overflow-x:auto}
+button,select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+button[aria-pressed=true],.chip.on{background:var(--hot);color:#fff;border-color:var(--hot)}
+#bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#track{position:relative;flex:1 1 280px;min-width:200px;height:28px}
+#seek{position:absolute;inset:0;width:100%;margin:0;accent-color:var(--hot)}
+#ticks i{position:absolute;top:6px;bottom:6px;width:2px;background:var(--cool);opacity:.7;pointer-events:none}
+#clock{font-variant-numeric:tabular-nums;color:var(--dim)}
+</style>
+</head>
+<body>
+<main id="app">
+  <div id="stage"><canvas id="cv"></canvas><div id="hud"></div><div id="tag">空格 播放 · H 隐藏信息</div></div>
+  <div id="chips"></div>
+  <div id="bar">
+    <button id="bPlay">播放</button>
+    <button id="bRe">重播</button>
+    <button id="bRev" aria-pressed="false">倒放</button>
+    <div id="track"><input id="seek" type="range" min="0" max="1000" value="0" step="1" aria-label="进度"><div id="ticks"></div></div>
+    <button id="bMute" aria-pressed="false">静音</button>
+    <span id="clock"></span>
+    <select id="qual" aria-label="画质"><option value="high">1080p</option><option value="mid">720p</option></select>
+    <button id="bExp" hidden>导出 WebM</button>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+/* ============================ CONFIG（全部可调参数集中在此） ============================ */
+// 镜头速写：shot(开始秒, 时长, [起点位置, 起点目标, 起点焦距], [终点位置, 终点目标, 终点焦距], 抖动, 缓动)
+// 位置与目标均为相对曙光号的偏移；每次 shot 切换即硬切。
+const shot=(t,dur,a,b,shake=0,ease='none',abs=false)=>({t,dur,from:{p:a[0],t:a[1],fov:a[2]},to:{p:b[0],t:b[1],fov:b[2]},shake,ease,abs});
+
+const CFG={
+  W:1920, H:1080, FPS:60, DURATION:60,
+  quality:'high', QUALITY:{high:1, mid:2/3},      // 内部渲染分辨率比例
+  exportBitrate:16e6,
+  audio:{bgm:true, volume:0.8, bpm:160},                    // 阶段 6 启用
+  color:{
+    bg:0x02030a, star:0xfff1cf, nebula:[0x3a1c6e,0x0f3a6e], outline:0x05060c,
+    hero:  {main:0xe8f0ff, accent:0x2f7bff, glow:0x7fd8ff},
+    foe:   {main:0x1a0d12, accent:0xff2a3d, glow:0xff6a3d},
+    mother:{main:0x14080d, accent:0xc4162a, glow:0xff8a3d},
+    rock:  0x4a5568
+  },
+  // 全局特效强度；各幕 fx 字段覆盖同名项
+  fx:{
+    bloom:{strength:0.9, threshold:0.55, radius:1.6},
+    radialBlur:0, chroma:0.0012, vignette:0.4, invert:0, speed:0, flashColor:0xffffff
+  },
+  // 冲击帧事件（全局秒）：flash = 闪白/反色，str 为强度
+  sun:{dir:[0.6,0.25,-0.75]},                      // 恒星方向（远景大耀斑）
+  texts:[                                          // 画面内文字（日+英）：t=开始 d=时长 at=归一化位置 sz=1080p字号 ink=冲击字 fo=淡出秒
+    {t:0,d:1.5,jp:'小惑星帯・外縁',en:'ASTEROID BELT, OUTER RIM',at:[0.05,0.88],al:'left',sz:44},
+    {t:5.625,d:0.9,jp:'黒潮',en:'BLACK TIDE',at:[0.5,0.5],sz:130,col:'#ff3d4f'},
+    {t:12,d:1.8,jp:'曙光号',en:'SHOKŌ-GŌ',at:[0.95,0.88],al:'right',sz:56},
+    {t:16.5,d:0.6,jp:'斬',en:'SLASH',at:[0.5,0.5],sz:340,ink:1,col:'#ffffff'},
+    {t:21,d:0.6,jp:'撃',en:'STRIKE',at:[0.5,0.5],sz:340,ink:1,col:'#ffe08a'},
+    {t:25.5,d:0.6,jp:'砕',en:'SHATTER',at:[0.5,0.5],sz:340,ink:1,col:'#ffffff'},
+    {t:27,d:1.8,jp:'旗艦「深淵」',en:'FLAGSHIP: ABYSS',at:[0.05,0.88],al:'left',sz:56,col:'#ff6a6a'},
+    {t:40.5,d:1.5,jp:'貫く',en:'PIERCE IT',at:[0.05,0.88],al:'left',sz:60},
+    {t:45,d:1.5,jp:'必殺・曙光断',en:'DAWNBREAKER',at:[0.5,0.5],sz:130,col:'#bfe9ff'},
+    {t:48,d:0.6,jp:'貫',en:'PIERCE',at:[0.5,0.5],sz:340,ink:1,col:'#ffffff'},
+    {t:57,d:3,jp:'曙光',en:'SHOKŌ',sub:'黒潮を断つ / CUTTING THE BLACK TIDE',at:[0.5,0.46],sz:170,fo:0.6}
+  ],
+  keys:{                                           // 关键帧 [秒, 值]，相邻点之间 power2.inOut 插值
+    form:  [[0,0],[10.5,0],[12,1],[31.5,1],[32.25,0],[39.75,0],[40.5,1],[60,1]],   // 曙光号形态 0=战机 1=人形（T1/T2/T3）
+    open:  [[0,0],[40.5,0],[42,1],[60,1]],            // 母舰核心装甲开启
+    charge:[[0,0],[34.5,0],[36,1],[36.1,0],[60,0]]    // 母舰主炮充能
+  },
+  stops:[[16.5,0.10],[21,0.10],[25.5,0.12],[36,0.08],[48,0.25]],
+  slows:[[37.5,39,0.3,1.5],[51,52.5,0.5,0.5]],      // 慢动作 [起,止,速率,追回秒]
+  freeze:[53,55.5],
+  fadeOut:[59.4,60],                                // 结尾淡出到黑 [起,止]                                 // 定格：世界时间减速到 0        // 命中顿帧 [时间, 时长]：世界定格，其后 0.4s 加速追回，不影响分镜时间码
+  events:[
+    {t:9, type:'alarm', dur:1.5},
+    {t:12, type:'flash', dur:0.12, str:1}, {t:16.5, type:'invert', dur:0.07}, {t:21, type:'invert', dur:0.07},
+    {t:25.5, type:'invert', dur:0.07}, {t:27, type:'flash', dur:0.12, str:1}, {t:36, type:'flash', dur:0.12, str:1},
+    {t:42, type:'flash', dur:0.12, str:1},
+    {t:48, type:'invert', dur:0.13}, {t:48, type:'flash', dur:0.13, str:0.6}, {t:53, type:'flash', dur:0.12, str:1}
+  ],
+  acts:[
+    {id:'A1', fn:'act1', name:'突囲',   en:'BREAKOUT',     start:0,  end:12, fx:{},
+     shots:[shot(0,1.5,[[-40,10,30],[0,0,-10],35],[[-32,8,20],[0,0,-10],32],0.01,'power1.out',true),
+            shot(1.5,1.5,[[0,2.5,9],[0,0,-6],52],[[1.5,2,7],[0,0,-6],52],0.03),
+            shot(3,1.5,[[1.4,1.2,-2.2],[0,.2,-.4],30],[[1.2,1,-1.8],[0,.2,-.4],28],0.03),
+            shot(4.5,0.375,[[-3,1,-6],[-9,2,-14],30],[[-3,1,-6],[-9,2,-14],26],0.06),
+            shot(4.875,0.375,[[1,0,-5],[0,8,-12],30],[[1,0,-5],[0,8,-12],26],0.06),
+            shot(5.25,0.375,[[3,1,-6],[9,1,-14],30],[[3,1,-6],[9,1,-14],26],0.06),
+            shot(5.625,0.375,[[0,2,8],[0,0,-5],40],[[0,1.5,6],[0,0,-5],38],0.05),
+            shot(6,1.5,[[0,28,22],[0,0,0],55],[[0,24,20],[0,0,0],52],0.04),
+            shot(7.5,1.5,[[2,2.5,8],[0,0,-8],46],[[-3,1.5,6],[0,0,-8],42],0.08),
+            shot(9,1.5,[[0,1.5,5],[0,0,-2],38],[[0,1,3.5],[0,0,-2],34],0.15),
+            shot(10.5,1.5,[[3,1.5,6],[0,0,-1],36],[[1.5,.5,4],[0,0,-1],30],0.05,'power2.inOut')]},
+    {id:'A2', fn:'act2', name:'反撃',   en:'COUNTERSTRIKE',start:12, end:27, fx:{radialBlur:0.03, speed:0.5},
+     path:[[0,0,0,0],[1.5,0,0,0],[4.5,-5.5,1,-24,'power2.in'],[6,-5.5,1,-27,'power2.out'],[9,-2,2,-34],[10.5,-1,1,-38],[12.5,1,0,-52],[13.5,3,0,-58],[15,3,0,-62,'power2.out']],   // 曙光号路径 [秒,x,y,z,缓动]
+     kills:[4.5,9,13.5],                                // 三架敌机被击破的幕内时间
+     shots:[shot(0,1.5,[[1.5,-2.5,5],[0,.5,0],50],[[0,-1.8,4.2],[0,.5,0],44],0.02,'power1.out'),
+            shot(1.5,1.5,[[6,1,2],[0,0,-6],45],[[5,.8,-1],[0,0,-6],45],0.05),
+            shot(3,1.5,[[4,2,4],[-.5,0,-10],42],[[2.5,1.2,-1],[-.5,0,-10],38],0.08,'power2.in'),
+            shot(4.5,1.5,[[1.5,.8,-2.5],[0,0,-4],40],[[5,2.5,6],[0,0,0],46],0.1,'power3.out'),
+            shot(6,1.5,[[-3,10,5],[0,0,-6],48],[[-1,7,3],[0,0,-6],44],0.06),
+            shot(7.5,1.5,[[-4.5,2,-27],[8,3,-45],34],[[-1,2,-33],[8,3,-45],30],0.1,'none',true),
+            shot(9,1.5,[[-6,4,-30],[8,3,-46],36],[[-4,3,-34],[8,3,-46],32],0.08,'none',true),
+            shot(10.5,1.5,[[0,2,6],[0,0,-30],50],[[0,1.5,4],[0,0,-30],42],0.06,'power2.in'),
+            shot(12,1.5,[[-2,-.5,6],[2,0,-20],44],[[-1,-.5,4],[3,0,-20],40],0.12),
+            shot(13.5,1.5,[[3,1,6],[0,0,-8],40],[[7,1,10],[0,0,-6],48],0.1,'power3.out')]},
+            
+            
+    {id:'A3', fn:'act3', name:'母艦',   en:'MOTHERSHIP',   start:27, end:42, fx:{vignette:0.5},
+     mother:{pos:[0,0,-100]},
+     path:[[0,-6,8,0],[1.5,-3,6,-25],[3,0,6,-52],[4.5,0,6,-66,'none'],[6,0,6,-96,'none'],[7.5,0,6.5,-124,'power2.out'],[9,26,9,-80],[10.5,5,3,-50],[12,6,2,-52],[13.5,2,4,-60],[15,0,5,-82,'power3.in']],
+     shots:[shot(0,1.5,[[-26,-8,-130],[0,3,-115],55],[[-26,-8,-75],[0,3,-88],55],0.02,'none',true),
+            shot(1.5,1.5,[[40,25,-60],[0,0,-85],50],[[34,20,-62],[0,0,-85],50],0.03,'none',true),
+            shot(3,1.5,[[0,3,9],[0,0,-10],55],[[0,2.5,7],[0,0,-10],55],0.06),
+            shot(4.5,1.5,[[5,2,6],[0,0,-6],48],[[7,3,4],[0,0,-6],48],0.05),
+            shot(6,1.5,[[9,1.5,-2],[0,0,-8],40],[[8,1,-6],[0,0,-8],40],0.05),
+            shot(7.5,1.5,[[6,3,-52],[0,-.3,-66.5],36],[[4,2,-55],[0,-.3,-66.5],36],0.05,'power2.in',true),
+            shot(9,1.5,[[45,15,-40],[0,0,-70],50],[[40,12,-45],[0,0,-70],50],0.1,'none',true),
+            shot(10.5,1.5,[[3,1.5,6],[0,0,0],44],[[5,2,8],[0,0,0],44],0.18),
+            shot(12,1.5,[[1.5,1,-3],[0,.3,-1],32],[[1,.7,-2.5],[0,.3,-1],32],0.04),
+            shot(13.5,1.5,[[0,6,-45],[0,3,-90],50],[[0,5,-58],[0,3,-90],44],0.06,'none',true)]},
+            
+    {id:'A4', fn:'act4', name:'必殺',   en:'FINAL STRIKE', start:42, end:53, fx:{radialBlur:0.05, chroma:0.003, speed:0.7},
+     mother:{pos:[0,0,-100]},                       // 母舰位置（与 A3 一致）
+     blade:{len0:2, len1:20, charge:0.5},          // 光刃长度与蓄力占比
+     path:[[0,0,5,-82],[4.5,0,5,-82],[6,0,3.6,-94,'power3.in'],[7.5,0,3.3,-128,'power2.out'],[9,0,3.3,-136,'power1.out'],[11,0,4,-150,'power2.out']],
+     shots:[shot(0,1.5,[[3,1,6],[0,0,-3],42],[[2.5,1,5.5],[0,0,-3],42],0),
+            shot(1.5,1.5,[[5,1,3],[0,0,-2],40],[[-5,1.5,3],[0,0,-2],40],0.03),
+            shot(3,1.5,[[1,.4,-2.2],[0,.3,-1],28],[[.7,.3,-1.8],[0,.3,-1],28],0.05),
+            shot(4.5,1.5,[[0,2,9],[0,0,-10],62],[[0,1.2,6],[0,0,-10],62],0.12,'power2.in'),
+            shot(6,1.5,[[7,4,-84],[0,3.5,-96],40],[[8,3.8,-100],[0,3.5,-96],40],0.15,'none',true),
+            shot(7.5,1.5,[[0,2,9],[0,0,-6],45],[[0,2,12],[0,0,-6],45],0.08),
+            shot(9,1.5,[[18,10,-70],[0,2,-95],45],[[18,10,-130],[0,2,-120],45],0.05,'none',true),
+            shot(10.5,0.5,[[30,12,-80],[0,2,-100],40],[[30,12,-80],[0,2,-100],40],0.1,'none',true)]},
+            
+    {id:'A5', fn:'act5', name:'定格',   en:'FREEZE FRAME', start:53, end:60, fx:{vignette:0.55},
+     path:[[0,0,4,-150],[2.5,0,3,-156,'power1.out'],[7,0,3,-156]],
+     shots:[shot(0,2.5,[[0,1,-14],[0,2,40],50],[[0,1,-11],[0,2,40],46],0.05,'power2.out'),
+            shot(2.5,4.5,[[0,1,-11],[0,2,40],46],[[0,1,-9],[0,2,40],42],0,'power1.out')]}
+  ]
+};
+
+/* ============================ 工具 ============================ */
+const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+const $=id=>document.getElementById(id);
+const rng=s=>()=>(s=s*16807%2147483647)/2147483647;      // 固定种子，保证确定性
+const fmt=t=>{const m=Math.floor(t/60),s=t-m*60;return String(m).padStart(2,'0')+':'+s.toFixed(2).padStart(5,'0')};
+const easeOut=u=>gsap.parseEase('power3.out')(clamp(u,0,1));
+
+/* ============================ 渲染器与场景 ============================ */
+const cv=$('cv');
+const renderer=new THREE.WebGLRenderer({canvas:cv,antialias:false});
+renderer.setPixelRatio(1);
+const scene=new THREE.Scene(); scene.background=new THREE.Color(CFG.color.bg);
+const cam=new THREE.PerspectiveCamera(50,16/9,0.1,2000);
+const mat=c=>new THREE.MeshBasicMaterial({color:c});
+
+// 星空（固定种子）
+{ const R=rng(7),n=1800,p=new Float32Array(n*3);
+  for(let i=0;i<n;i++){const th=R()*6.2832,ph=Math.acos(2*R()-1),r=400+R()*600;
+    p.set([r*Math.sin(ph)*Math.cos(th),r*Math.cos(ph),r*Math.sin(ph)*Math.sin(th)],i*3);}
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(p,3));
+  scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:CFG.color.star,size:1.6,sizeAttenuation:false}))); }
+
+/* ============================ 程序化机体：赛璐珞三段着色 + 反壳轮廓线（机头朝 -Z；母舰舰首朝 +Z） ============================ */
+const easeIO=gsap.parseEase('power2.inOut');
+function kf(a,T){if(T<=a[0][0])return a[0][1];for(let i=1;i<a.length;i++)if(T<a[i][0]){const p=a[i-1],q=a[i];return p[1]+(q[1]-p[1])*easeIO((T-p[0])/(q[0]-p[0]));}return a[a.length-1][1];}
+const LIGHT=new THREE.Vector3(.5,.8,.6).normalize(),_tc={},_oc={};
+function toon(c,rim){const k=c+'_'+rim;return _tc[k]||(_tc[k]=new THREE.ShaderMaterial({
+  uniforms:{base:{value:new THREE.Color(c)},dark:{value:new THREE.Color(c).multiplyScalar(.42)},rim:{value:new THREE.Color(rim)},ld:{value:LIGHT}},
+  vertexShader:'varying vec3 vN,vV;void main(){vec4 w=modelMatrix*vec4(position,1.);vN=mat3(modelMatrix)*normal;vV=cameraPosition-w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}',
+  fragmentShader:'uniform vec3 base,dark,rim,ld;varying vec3 vN,vV;void main(){vec3 n=normalize(vN);float d=dot(n,ld);float s=d>.25?1.:d>-.2?.7:0.;vec3 c=mix(dark,base,s);float r=1.-max(dot(n,normalize(vV)),0.);c+=rim*step(.7,r)*step(-.3,d)*.6;gl_FragColor=vec4(c,1.);}'}));}
+function oline(th){return _oc[th]||(_oc[th]=new THREE.ShaderMaterial({uniforms:{th:{value:th},col:{value:new THREE.Color(CFG.color.outline)}},
+  vertexShader:'attribute vec3 sn;uniform float th;void main(){gl_Position=projectionMatrix*modelViewMatrix*vec4(position+sn*th,1.);}',
+  fragmentShader:'uniform vec3 col;void main(){gl_FragColor=vec4(col,1.);}',side:THREE.BackSide}));}
+function smoothN(g){const p=g.attributes.position,n=g.attributes.normal,m={},a=new Float32Array(p.count*3);
+  const key=i=>p.getX(i).toFixed(3)+','+p.getY(i).toFixed(3)+','+p.getZ(i).toFixed(3);
+  for(let i=0;i<p.count;i++){const s=m[key(i)]||(m[key(i)]=[0,0,0]);s[0]+=n.getX(i);s[1]+=n.getY(i);s[2]+=n.getZ(i);}
+  for(let i=0;i<p.count;i++){const s=m[key(i)],l=Math.hypot(s[0],s[1],s[2])||1;a.set([s[0]/l,s[1]/l,s[2]/l],i*3);}
+  g.setAttribute('sn',new THREE.BufferAttribute(a,3));}
+function part(g,c,th,par,x=0,y=0,z=0,rim=CFG.color.hero.glow){smoothN(g);const m=new THREE.Mesh(g,toon(c,rim));m.add(new THREE.Mesh(g,oline(th)));m.position.set(x,y,z);par.add(m);return m;}
+function glow(g,c,k,par,x=0,y=0,z=0){const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:new THREE.Color(c).multiplyScalar(k)}));m.position.set(x,y,z);par.add(m);return m;}
+const grp=(par,x=0,y=0,z=0)=>{const g=new THREE.Group();g.position.set(x,y,z);par.add(g);return g;};
+const Bx=(w,h,d)=>new THREE.BoxGeometry(w,h,d);
+
+// 曙光号：setForm(0~1) 战机↔人形；setBlade(长度) 右手光刃
+function buildHero(){
+  const P=CFG.color.hero,K=0x2b3553,th=.035,root=new THREE.Group(),body=grp(root);
+  part(Bx(1.1,1.2,.65),P.main,th,body); part(Bx(.7,.5,.12),P.accent,th,body,0,.15,-.38);
+  part(Bx(.8,.5,.6),K,th,body,0,-.85,0); part(Bx(.8,.9,.35),K,th,body,0,.2,.5);
+  const head=grp(body,0,.95,0); part(Bx(.5,.45,.5),P.main,th,head,0,.1,0); part(Bx(.1,.4,.12),P.accent,th,head,0,.5,-.05);
+  const eyes=glow(Bx(.4,.08,.05),P.glow,2,head,0,.12,-.27);
+  const nose=grp(body,0,1.15,0); part(new THREE.ConeGeometry(.35,1.2,4),P.main,th,nose,0,.4,0);
+  const leg=[-1,1].map(s=>{const l=grp(body,s*.3,-1.2,0);part(Bx(.4,1.4,.45),P.main,th,l,0,-.7,0);part(Bx(.46,.3,.6),K,th,l,0,-1.45,-.05);
+    const fl=glow(new THREE.ConeGeometry(.22,1.4,8).rotateX(Math.PI).translate(0,-.7,0),P.glow,1.8,l,0,-1.6,0);return {l,fl};});
+  const arm=[-1,1].map(s=>{const a=grp(body,s*.75,.35,0);part(Bx(.45,.5,.5),P.accent,th,a,0,.05,0);part(Bx(.3,.7,.3),P.main,th,a,0,-.45,0);
+    part(Bx(.34,.6,.34),K,th,a,0,-1,0);part(Bx(.28,.28,.3),P.main,th,a,0,-1.4,0);return a;});
+  const hand=arm[1]; part(new THREE.CylinderGeometry(.07,.07,.5,8).rotateX(Math.PI/2),K,th,hand,0,-1.4,-.25);
+  const blade=glow(new THREE.CylinderGeometry(.09,.09,1,8).rotateX(Math.PI/2),P.glow,2,hand,0,-1.4,-.5);
+  const wing=[-1,1].map(s=>{const w=grp(body,s*.35,.25,.45);part(Bx(1.8,.07,.9),P.main,th,w,s*.9,0,.1);part(Bx(.5,.09,.92),P.accent,th,w,s*1.45,0,.1);return w;});
+  const U=root.userData;
+  U.setForm=f=>{const L=(a,b)=>a+(b-a)*f;
+    body.rotation.x=L(-Math.PI/2,0); head.position.y=L(.55,.95); head.scale.setScalar(L(.75,1));
+    nose.scale.setScalar(Math.max(1-f,.001)); eyes.scale.setScalar(.2+.8*f);
+    leg.forEach((o,i)=>{o.l.position.x=(i?1:-1)*L(.2,.3);o.fl.scale.y=L(1,.35);});
+    arm.forEach((a,i)=>{a.position.x=(i?1:-1)*L(.62,.75);});
+    wing.forEach((w,i)=>{const s=i?1:-1;w.rotation.z=s*1.15*f;w.rotation.y=-s*.6*(1-f);});};
+  U.setBlade=L=>{const w=Math.max(1,L/3);blade.scale.set(w,w,Math.max(L,.001));blade.position.z=-.5-L/2;};
+  U.setForm(1); U.setBlade(0); return root;
+}
+// 黑潮战机：v=0,1 为量产机，v=2 为王牌机（更大、带天线）
+function buildFoe(v){
+  const F=CFG.color.foe,th=.03,g=new THREE.Group(),R=F.glow;
+  part(new THREE.ConeGeometry(.55,3.2,4).rotateX(-Math.PI/2).scale(1,.55,1),F.main,th,g,0,0,0,R);
+  [-1,1].forEach(s=>{const w=part(Bx(2.2+v*.5,.07,1.1),F.main,th,g,s*1.1,0,.7,R);w.rotation.y=-s*.55;part(Bx(.5,.08,1.12),F.accent,th,w,s*.85,.01,0,R);});
+  part(Bx(.07,.7,.9),F.main,th,g,0,.45,1,R);
+  glow(new THREE.SphereGeometry(.14,8,6),F.glow,2,g,0,.05,-1.3);
+  glow(new THREE.ConeGeometry(.28,1.2,8).rotateX(Math.PI/2).translate(0,0,.6),F.glow,2,g,0,0,1.6);
+  if(v===2){part(Bx(.05,.05,1.8),F.accent,th,g,0,.7,.3,R);g.scale.setScalar(1.35);}
+  return g;
+}
+// 母舰「深淵」：舰首 +Z，中央沟槽，核心在 z=6 处；setOpen 开装甲，setCharge 主炮充能
+function buildMother(){
+  const M=CFG.color.mother,th=.12,R=M.glow,g=new THREE.Group(),P=(geo,c,x,y,z,p=g)=>part(geo,c,th,p,x,y,z,R);
+  P(Bx(12,4,40),M.main,0,0,0); [-1,1].forEach(s=>P(Bx(3.7,2.2,34),M.main,s*2.65,3,-2)); P(Bx(5,2.5,8),M.accent,0,5.2,-14);
+  P(new THREE.ConeGeometry(8.5,10,4).rotateY(Math.PI/4).rotateX(Math.PI/2).scale(1,.65,1),M.main,0,0,25);
+  P(new THREE.CylinderGeometry(1.4,1.8,8,12).rotateX(Math.PI/2),M.accent,0,-.3,29);
+  const muz=glow(new THREE.SphereGeometry(1,12,8),M.glow,2.5,g,0,-.3,33.5);
+  const core=glow(new THREE.SphereGeometry(1.6,16,12),M.glow,2.2,g,0,3.3,6);
+  const door=[-1,1].map(s=>{const d=grp(g,s*3.4,5.1,6);P(Bx(3.4,.4,9),M.accent,-s*1.7,0,0,d);return d;});
+  const Rn=rng(5);
+  for(let i=0;i<18;i++){const s=i%2?1:-1,t=grp(g,s*(2.2+Rn()*1.4),4.1,-16+Rn()*30);t.rotation.y=Math.PI+(Rn()-.5)*.6;
+    P(new THREE.CylinderGeometry(.7,.9,.5,8),M.accent,0,.25,0,t);P(Bx(.22,.22,1.6),M.main,0,.6,-.9,t);}
+  const lg=Bx(.5,.18,.05); [-1,1].forEach(s=>{for(let z=-18;z<=18;z+=3.4)glow(lg,M.glow,1.6,g,s*6.03,0,z);});
+  [[-3,1],[3,1],[-3,-.8],[3,-.8]].forEach(([x,y])=>glow(new THREE.ConeGeometry(1.4,3,10).rotateX(-Math.PI/2).translate(0,0,-1.5),M.glow,1.8,g,x,y,-20));
+  const U=g.userData;
+  U.setOpen=o=>{door[0].rotation.z=1.3*o;door[1].rotation.z=-1.3*o;core.scale.setScalar(.6+.4*o);};
+  U.setCharge=c=>{muz.scale.setScalar(.15+1.5*c);};
+  U.setOpen(0); U.setCharge(0); return g;
+}
+
+/* ============================ 环境与特效库（阶段 3） ============================ */
+// 星云天穹：分层噪声 + 色阶化（赛璐珞感）+ 恒星耀斑
+const sky=new THREE.Mesh(new THREE.SphereGeometry(900,32,16),new THREE.ShaderMaterial({
+  uniforms:{c1:{value:new THREE.Color(CFG.color.nebula[0])},c2:{value:new THREE.Color(CFG.color.nebula[1])},sd:{value:new THREE.Vector3(...CFG.sun.dir).normalize()}},
+  vertexShader:'varying vec3 vD;void main(){vD=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+  fragmentShader:`uniform vec3 c1,c2,sd;varying vec3 vD;
+float h(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
+float n(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(h(i),h(i+vec3(1,0,0)),f.x),mix(h(i+vec3(0,1,0)),h(i+vec3(1,1,0)),f.x),f.y),mix(mix(h(i+vec3(0,0,1)),h(i+vec3(1,0,1)),f.x),mix(h(i+vec3(0,1,1)),h(i+vec3(1,1,1)),f.x),f.y),f.z);}
+float fbm(vec3 p){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*n(p);p*=2.03;a*=.5;}return s;}
+void main(){vec3 d=normalize(vD);float g=smoothstep(.45,.8,fbm(d*2.2+3.));g=floor(g*4.)/4.;
+vec3 col=mix(c1,c2,fbm(d*1.3))*g*.9;float s=max(dot(d,sd),0.);col+=vec3(1.,.9,.7)*(pow(s,600.)*3.+pow(s,24.)*.35);gl_FragColor=vec4(col,1.);}`,
+  side:THREE.BackSide,depthTest:false,depthWrite:false}));
+sky.renderOrder=-10; sky.frustumCulled=false; scene.add(sky);
+
+// 小行星：顶点按固定种子扰动的低面数岩石，赛璐珞着色 + 轮廓
+function rock(R,r){const g=new THREE.IcosahedronGeometry(r,1),p=g.attributes.position,o={};
+  for(let i=0;i<p.count;i++){const k=p.getX(i).toFixed(3)+'|'+p.getY(i).toFixed(3)+'|'+p.getZ(i).toFixed(3);o[k]=o[k]||(.7+R()*.6);p.setXYZ(i,p.getX(i)*o[k],p.getY(i)*o[k]*.85,p.getZ(i)*o[k]);}
+  g.computeVertexNormals(); const m=part(g,CFG.color.rock,.06*Math.sqrt(r),scene,0,0,0,0x4a78c8); m.rotation.set(R()*6,R()*6,R()*6); return m;}
+
+// 杂兵：黑潮的小型战机（不计入编队）
+function buildMook(){const F=CFG.color.foe,g=new THREE.Group();
+  part(new THREE.ConeGeometry(.3,1.5,4).rotateX(-Math.PI/2),F.main,.025,g,0,0,0,F.glow);
+  [-1,1].forEach(s=>{const w=part(Bx(1.1,.05,.5),F.accent,.025,g,s*.55,0,.35,F.glow);w.rotation.y=-s*.5;});
+  glow(new THREE.SphereGeometry(.07,6,4),F.glow,2,g,0,0,-.7); return g;}
+
+// 特效：确定性爆炸（火球 + 火花 + 冲击环）。FX.burst(槽位, 爆炸年龄秒, 位置, 尺寸)，年龄超出 0~1.2s 则不显示
+const FX=(()=>{
+  const mk=(n,fire)=>{const R=rng(fire?3:9),d=new Float32Array(n*3),r=new Float32Array(n);
+    for(let i=0;i<n;i++){const th=R()*6.2832,ph=Math.acos(2*R()-1);d.set([Math.sin(ph)*Math.cos(th),Math.sin(ph)*Math.sin(th),Math.cos(ph)],i*3);r[i]=R();}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(n*3),3));
+    g.setAttribute('aDir',new THREE.BufferAttribute(d,3));g.setAttribute('aR',new THREE.BufferAttribute(r,1));
+    const m=new THREE.ShaderMaterial({uniforms:{age:{value:0},sz:{value:1},fire:{value:fire},px:{value:1000}},
+      vertexShader:`attribute vec3 aDir;attribute float aR;uniform float age,sz,fire,px;varying float vK;
+void main(){float k=clamp(age/mix(1.1,.9,fire),0.,1.);vK=k;float e=1.-pow(1.-k,3.);
+vec3 p=aDir*mix(14.,4.5,fire)*(.3+aR)*e*sz*.5+vec3(0.,-1.5*k*k*sz*(1.-fire),0.);
+vec4 mv=modelViewMatrix*vec4(p,1.);gl_Position=projectionMatrix*mv;
+float ws=fire>.5?sz*mix(1.2,3.2,aR)*(.5+.9*e):sz*.18*(1.-k);gl_PointSize=px*ws/max(-mv.z,.1);}`,
+      fragmentShader:`varying float vK;uniform float fire;void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;
+float a=smoothstep(.5,fire>.5?.0:.3,d);
+vec3 c=fire>.5?mix(mix(vec3(1.,.95,.7),vec3(1.,.45,.1),smoothstep(0.,.35,vK)),vec3(.25,.04,.02),smoothstep(.35,1.,vK)):vec3(1.,.85,.5);
+float f=fire>.5?(1.-vK)*(1.-vK):(1.-vK);gl_FragColor=vec4(c*a*f*(fire>.5?1.4:2.2),1.);}`,
+      transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});
+    const p=new THREE.Points(g,m);p.frustumCulled=false;return p;};
+  const pool=Array.from({length:8},()=>{const g=new THREE.Group(),f=mk(26,1),s=mk(160,0),
+    rg=new THREE.Mesh(new THREE.RingGeometry(.92,1,48),new THREE.MeshBasicMaterial({color:new THREE.Color(1.6,1.4,1.1),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide}));
+    g.add(f,s,rg);g.visible=false;scene.add(g);return {g,f,s,rg};});
+  return{
+    reset(){pool.forEach(o=>o.g.visible=false);},
+    burst(i,age,pos,sz){const o=pool[i%8];if(age<0||age>1.2)return;o.g.visible=true;o.g.position.copy(pos);
+      [o.f,o.s].forEach(p=>{p.material.uniforms.age.value=age;p.material.uniforms.sz.value=sz;});
+      const k=age/1.2;o.rg.scale.setScalar(sz*(.5+16*(1-Math.pow(1-k,3))));o.rg.material.opacity=Math.max(0,1-k*1.4);},
+    sync(c,h){const px=h/(2*Math.tan(c.fov*Math.PI/360));pool.forEach(o=>{o.f.material.uniforms.px.value=px;o.s.material.uniforms.px.value=px;o.rg.quaternion.copy(c.quaternion);});}
+  };
+})();
+
+// 画面内文字：2D canvas 绘制后在后处理合成，因此会被导出进视频
+const tc=document.createElement('canvas');tc.width=1280;tc.height=720;
+const tx=tc.getContext('2d'),tTex=new THREE.CanvasTexture(tc);let tOn=false;
+function drawText(T){
+  const on=CFG.texts.filter(s=>T>=s.t&&T<s.t+s.d);
+  if(!on.length&&!tOn)return; tOn=on.length>0;
+  tx.setTransform(2/3,0,0,2/3,0,0); tx.clearRect(0,0,1920,1080);
+  on.forEach(s=>{const l=T-s.t,al=Math.max(0,Math.min(1,l/.12,(s.d-l)/(s.fo||.2))),pu=s.ink?1+Math.max(0,1-l/.1)*.8:1,sz=s.sz||44;
+    tx.save();tx.globalAlpha=al;tx.translate(s.at[0]*1920,s.at[1]*1080);if(s.ink)tx.rotate(-.12);tx.scale(pu,pu);
+    tx.textAlign=s.al||'center';tx.textBaseline='middle';tx.lineJoin='round';tx.strokeStyle='#05060c';
+    const ln=(txt,px,y,w,col)=>{tx.font=`${w} ${px}px 'Zen Kaku Gothic New','Hiragino Sans','Yu Gothic',sans-serif`;tx.lineWidth=px*.14;tx.strokeText(txt,0,y);tx.fillStyle=col;tx.fillText(txt,0,y);};
+    ln(s.jp,sz,0,900,s.col||'#fff'); if(s.en)ln(s.en,sz*.3,sz*.72,500,s.col||'#fff'); if(s.sub)ln(s.sub,sz*.2,sz*1.05,500,'#cfe4ff');
+    tx.restore();});
+  tTex.needsUpdate=true;
+}
+if(document.fonts)document.fonts.load(`900 64px 'Zen Kaku Gothic New'`,CFG.texts.map(s=>s.jp+(s.sub||'')).join('')).catch(()=>{});
+
+// 阶段 4 工具：世界时间扭曲（命中顿帧）、朝向、路径、曳光弹
+const NW=240;
+const WT=(()=>{const seg=[];CFG.stops.forEach(([s,d])=>seg.push([s,s+d,0],[s+d,s+d+.4,1+d/.4]));
+  CFG.slows.forEach(([a,b,r,cu])=>seg.push([a,b,r],[b,b+cu,1+(1-r)*(b-a)/cu]));
+  seg.push([CFG.freeze[0],CFG.freeze[1],t=>1-easeIO((t-CFG.freeze[0])/(CFG.freeze[1]-CFG.freeze[0]))],[CFG.freeze[1],99,0]);const w=[0];
+  for(let i=1;i<=CFG.DURATION*NW;i++){const t=(i-.5)/NW;let r=1;for(const s of seg)if(t>=s[0]&&t<s[1])r=typeof s[2]==='function'?s[2](t):s[2];w.push(w[i-1]+r/NW);}return w;})();
+const warp=T=>{const x=clamp(T,0,CFG.DURATION)*NW,i=Math.min(Math.floor(x),WT.length-2);return WT[i]+(WT[i+1]-WT[i])*(x-i);};   // 主时间→世界时间
+const face=(o,t)=>o.lookAt(o.position.x*2-t.x,o.position.y*2-t.y,o.position.z*2-t.z);   // 机头(-Z)朝向 t
+const hp=(H,t)=>{let i=1;while(i<H.length-1&&t>=H[i][0])i++;const p=H[i-1],q=H[i],k=gsap.parseEase(q[4]||'power2.inOut')(clamp((t-p[0])/(q[0]-p[0]),0,1));
+  return [p[1]+(q[1]-p[1])*k,p[2]+(q[2]-p[2])*k,p[3]+(q[3]-p[3])*k];};
+function trc(c,t,ctr){c.tracers.forEach((m,i)=>{const k=i*.2618+t*.4,s=(t*1.3+i*.173)%1,q=1-s;m.visible=true;
+  m.position.set(ctr.x+Math.cos(k)*26*q,ctr.y+Math.sin(k)*13*q,ctr.z-5+Math.sin(k*1.3)*8*q);m.lookAt(ctr.x,ctr.y,ctr.z-5);});}
+
+// 对象实例（岩石已在阶段 3 替换；世界空间光刃仍为占位，阶段 3 / 阶段 5 处理）
+const ctx={
+  hero:buildHero(),
+  foes:[0,1,2].map(buildFoe),
+  mother:buildMother(),
+    rocks:[]
+};
+{ const R=rng(11);
+  for(let i=0;i<40;i++){const m=rock(R,0.8+R()*2.5);
+    m.position.set((R()-.5)*80,(R()-.5)*40,-R()*140+10); m.userData.h=m.position.clone();ctx.rocks.push(m); scene.add(m);} }
+ctx.mooks=Array.from({length:12},buildMook);
+ctx.tracers=Array.from({length:24},()=>glow(Bx(.07,.07,3),CFG.color.foe.glow,2.2,scene));
+ctx.missiles=Array.from({length:36},()=>glow(Bx(.18,.18,.6),CFG.color.hero.glow,2,scene));
+ctx.beam=glow(new THREE.CylinderGeometry(1,1,1,12).rotateX(Math.PI/2).translate(0,0,.5),0xfff0c0,2.5,scene);
+scene.add(ctx.hero,ctx.mother,...ctx.foes,...ctx.mooks);
+
+/* ============================ 各幕函数（t=幕内秒, u=幕内进度0~1, c=场景对象, a=本幕配置） ============================
+   规则：只根据 t 计算状态，不累积、不读上一帧。 */
+const ACT={
+  act1(t,u,c,a){                                   // 突围被围（分镜 A1）
+    const h=c.hero,E=[[-9,2,-14],[0,8,-12],[9,1,-14]];
+    h.position.set(Math.sin(t*.8)*3,Math.cos(t*.6)*1.5,-t*8);
+    h.rotation.z=Math.sin(t*.8)*.4+(t>7.5?6.2832*easeIO(clamp((t-7.5)/1.5,0,1)):0);
+    c.foes.forEach((f,i)=>{if(t<4.5+i*.375)return;f.visible=true;let p;
+      if(t<6){const k=easeIO(clamp((t-4.5)/1.5,0,1));p=E[i].map(v=>v*(1.5-.5*k));}
+      else{const r=22-5*(t-6)/6,k=t*.9+i*2.094;p=[Math.cos(k)*r,Math.sin(k)*r*.6,-5];}
+      f.position.set(h.position.x+p[0],h.position.y+p[1],h.position.z+p[2]);face(f,h.position);});
+    const mp=(i,tt)=>{const k=-tt*.7+i*.5236,r=24+(i%3)*4;return [Math.cos(k)*r,Math.sin(k*1.3)*8,-5+Math.sin(k)*r*.5];};
+    c.mooks.forEach((m,i)=>{if(t<6||(i===0&&t>=8.2))return;m.visible=true;const p=mp(i,t);
+      m.position.set(h.position.x+p[0],h.position.y+p[1],h.position.z+p[2]);face(m,h.position);});
+    if(t>=6&&t<10.5)trc(c,t,h.position);
+    if(t>=8.2){const p=mp(0,8.2);FX.burst(3,t-8.2,new THREE.Vector3(Math.sin(8.2*.8)*3+p[0],Math.cos(8.2*.6)*1.5+p[1],-65.6+p[2]),2.2);}   // 流弹引爆杂兵
+  },
+  act2(t,u,c,a){                                   // 反击破阵（分镜 A2）：光刃斩 A、导弹毁 B、岩石砸 C
+    const h=c.hero,P=hp(a.path,t),K=a.kills;h.position.set(P[0],P[1],P[2]);
+    h.userData.setBlade(clamp((t-.3)/.5,0,1)*2.4);
+    h.rotation.x=-6.2832*easeIO(clamp((t-6.3)/1,0,1));
+    const A=new THREE.Vector3(-6,1,-26),B=new THREE.Vector3(8,3+Math.sin(t)*.5,-46),kC=easeIO(clamp((t-10.5)/3,0,1)),
+      C=new THREE.Vector3(16-12*kC,6-6.5*kC,-110+48*kC);
+    c.rocks[0].position.set(4,-1.5,-66); c.rocks[0].scale.setScalar(2.2);
+    if(t<K[0]){c.foes[0].visible=true;c.foes[0].position.copy(A);face(c.foes[0],h.position);}
+    if(t>=4.5&&t<K[1]){c.foes[1].visible=true;c.foes[1].position.copy(B);face(c.foes[1],h.position);}
+    if(t>=10.5&&t<K[2]){c.foes[2].visible=true;c.foes[2].position.copy(C);face(c.foes[2],h.position);}
+    FX.burst(0,t-K[0],A,3.5); FX.burst(1,t-K[1],new THREE.Vector3(8,3+Math.sin(K[1])*.5,-46),3.5); FX.burst(2,t-K[2],new THREE.Vector3(4,-.5,-62),3.5);
+    c.mooks.forEach((m,i)=>{if(i>5||t<5||t>9.2)return;m.visible=true;m.position.set(h.position.x+(i-2.5)*4,h.position.y+Math.sin(t*2+i)*3,h.position.z+12+i*2);face(m,h.position);});
+    const p0=hp(a.path,7.5);
+    for(let j=0;j<6;j++)for(let k=0;k<6;k++){const s=(t-7.5-j*.08)/(1.5-j*.08)-k*.03;if(s<0||s>1)continue;
+      const o=(j%2?1:-1)*.8,x0=p0[0]+o,y0=p0[1]+.6,z0=p0[2]-.5,x1=(x0+8)/2+(j-2.5)*5,y1=(y0+3)/2+(j%3-1)*6,z1=(z0-46)/2,q=1-s,m=c.missiles[j*6+k];
+      m.visible=true;m.scale.setScalar(1-k*.14);m.position.set(q*q*x0+2*q*s*x1+s*s*8,q*q*y0+2*q*s*y1+s*s*3,q*q*z0+2*q*s*z1+s*s*-46);}
+  },
+  act3(t,u,c,a){                                   // 母舰对决（分镜 A3）：沟槽追跑、翼尖光刃清炉塔、主炮险避、冲向核心
+    const h=c.hero,P=hp(a.path,t),Q=hp(a.path,t+.05);h.position.set(P[0],P[1],P[2]);
+    const v=new THREE.Vector3(Q[0]-P[0],Q[1]-P[1],Q[2]-P[2]); if(v.length()>1e-4)face(h,h.position.clone().add(v));
+    if(t>=10.5&&t<12)h.rotateZ(12.566*easeIO((t-10.5)/1.5));
+    c.mother.visible=true; c.mother.position.set(...a.mother.pos);
+    c.mooks.forEach((m,i)=>{const s=t-1.5-i*.15;if(s<0)return;m.visible=true;const sd=i%2?1:-1,k=clamp(s,0,4);
+      m.position.set(sd*(8+k*5)+Math.sin(t*.8+i)*3,2+(i%4)*2.5+Math.sin(t+i)*1.5,-100+(i-6)*3.5+k*3);face(m,h.position);});
+    if(t>=3&&t<10)trc(c,t,h.position);
+    for(let i=0;i<6;i++){const ti=6+i*.2;FX.burst(i,t-ti,new THREE.Vector3(i%2?2.8:-2.8,4.5,hp(a.path,ti)[2]),1.4);}   // 翼尖光刃连锁小爆炸
+    if(t>=9&&t<10.5){const k=(t-9)/1.5,w=1+Math.sin(k*3.14)*.5;c.beam.visible=true;c.beam.position.set(0,-.3,-66.5);c.beam.rotation.y=.5-k;c.beam.scale.set(w,w,140);}
+    FX.burst(6,t-10.5,h.position,1.6);
+  },
+  act4(t,u,c,a){                                   // 必杀一击（分镜 A4）：光刃蓄力伸长、贯穿核心、连锁爆炸
+    const h=c.hero,P=hp(a.path,t),b=a.blade;h.position.set(P[0],P[1],P[2]);
+    h.userData.setBlade(t<1.5?b.len0:t<4.5?b.len0+(9-b.len0)*easeIO((t-1.5)/3):9+(b.len1-9)*easeIO(clamp((t-4.5)/1.5,0,1)));
+    if(t<10.6){c.mother.visible=true;c.mother.position.set(...a.mother.pos);}
+    FX.burst(0,t-6,new THREE.Vector3(0,3.3,-94),6);
+    for(let i=0;i<8;i++)FX.burst(i+1,t-(7+i*.45),new THREE.Vector3(i%2?4:-4,3,-94-i*3.2),3.5);
+    FX.burst(5,t-10.2,new THREE.Vector3(0,3,-100),14);
+  },
+  act5(t,u,c,a){                                   // 定格（分镜 A5）：世界时间减速到 0，火球用慢速年龄保持可见
+    const P=hp(a.path,t);c.hero.position.set(P[0],P[1],P[2]);
+    FX.burst(0,(t+.5)*.3,new THREE.Vector3(0,3,-100),16);
+  },
+};
+
+/* ============================ 后处理链（核心 API 手写：泛光 + 径向模糊 + 色差 + 暗角 + 冲击帧） ============================ */
+const HT=renderer.capabilities.isWebGL2?THREE.HalfFloatType:THREE.UnsignedByteType;
+const mkRT=()=>new THREE.WebGLRenderTarget(4,4,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,format:THREE.RGBAFormat,type:HT});
+const rtS=mkRT(),rtA=mkRT(),rtB=mkRT();
+const quad=new THREE.PlaneBufferGeometry(2,2),ortho=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+const VS='varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}';
+function pass(fs,uniforms){const m=new THREE.ShaderMaterial({uniforms,vertexShader:VS,fragmentShader:fs,depthTest:false,depthWrite:false});
+  const mesh=new THREE.Mesh(quad,m); mesh.frustumCulled=false; const sc=new THREE.Scene(); sc.add(mesh); return {m,sc};}
+const run=(p,target)=>{renderer.setRenderTarget(target);renderer.render(p.sc,ortho);};
+
+const pBright=pass('uniform sampler2D tex;uniform float th;varying vec2 vUv;void main(){vec3 c=texture2D(tex,vUv).rgb;float l=max(c.r,max(c.g,c.b));gl_FragColor=vec4(c*smoothstep(th,th+.25,l),1.);}',
+  {tex:{value:null},th:{value:.55}});
+const pBlur=pass('uniform sampler2D tex;uniform vec2 dir;varying vec2 vUv;void main(){vec3 s=texture2D(tex,vUv).rgb*.227027;vec2 o1=dir*1.3846,o2=dir*3.2308;s+=(texture2D(tex,vUv+o1).rgb+texture2D(tex,vUv-o1).rgb)*.316216;s+=(texture2D(tex,vUv+o2).rgb+texture2D(tex,vUv-o2).rgb)*.070270;gl_FragColor=vec4(s,1.);}',
+  {tex:{value:null},dir:{value:new THREE.Vector2()}});
+const pMix=pass(`uniform sampler2D tScene,tBloom;uniform float bloom,rblur,chroma,vig,flash,inv,speed,uT,fade;uniform sampler2D tText;float hs(float n){return fract(sin(n*91.3458)*47453.5453);}uniform vec3 flashCol;varying vec2 vUv;
+vec3 samp(vec2 uv){vec2 d=uv-.5;float k=chroma*length(d)*8.;return vec3(texture2D(tScene,uv+d*k).r,texture2D(tScene,uv).g,texture2D(tScene,uv-d*k).b);}
+void main(){vec2 d=vUv-.5;vec3 c=vec3(0.);
+for(int i=0;i<10;i++){float s=1.-rblur*float(i)/9.;c+=samp(.5+d*s);}c/=10.;
+c+=texture2D(tBloom,vUv).rgb*bloom;c=mix(c,1.-c,inv);float an=atan(d.y,d.x),ln=hs(floor(an*70.)+floor(uT*12.)*13.);c+=speed*step(.9,ln)*smoothstep(.3,.8,length(d)*1.6);
+c*=1.-vig*smoothstep(.35,.95,length(d)*1.4);vec4 tt=texture2D(tText,vUv);c=mix(c,tt.rgb,tt.a);c=mix(c,flashCol,flash);c*=1.-fade;gl_FragColor=vec4(c,1.);}`,
+  {tScene:{value:rtS.texture},tBloom:{value:rtA.texture},bloom:{value:0},rblur:{value:0},chroma:{value:0},vig:{value:0},flash:{value:0},inv:{value:0},speed:{value:0},fade:{value:0},uT:{value:0},tText:{value:null},flashCol:{value:new THREE.Color()}});
+
+function setQ(q){
+  CFG.quality=q; const s=CFG.QUALITY[q],w=Math.round(CFG.W*s),h=Math.round(CFG.H*s);
+  renderer.setSize(w,h,false); rtS.setSize(w,h); rtA.setSize(w>>1,h>>1); rtB.setSize(w>>1,h>>1);
+  $('qual').value=q; dirty=true;
+}
+
+/* ============================ 帧合成：render(T) 是 T 的纯函数 ============================ */
+let dirty=true,last=-1;
+const actAt=T=>{let a=CFG.acts[0];for(const x of CFG.acts)if(T>=x.start)a=x;return a;};
+
+function fxAt(a,T){
+  const f=Object.assign({},CFG.fx,a.fx); let flash=0;
+  for(const e of CFG.events) if(e.type==='flash'&&T>=e.t&&T<e.t+e.dur) flash=Math.max(flash,e.str*Math.pow(1-(T-e.t)/e.dur,2));
+  for(const e of CFG.events) if(e.type==='invert'&&T>=e.t&&T<e.t+e.dur) f.invert=1; else if(e.type==='alarm'&&T>=e.t&&T<e.t+e.dur){f.chroma=.006;f.vignette=.75;}
+  f.flash=flash; f.fade=clamp((T-CFG.fadeOut[0])/(CFG.fadeOut[1]-CFG.fadeOut[0]),0,1); return f;
+}
+function applyCamera(a,lt){
+  let sh=a.shots[0]; for(const s of a.shots) if(lt>=s.t) sh=s;
+  const k=gsap.parseEase(sh.ease)(clamp((lt-sh.t)/sh.dur,0,1)), L=(x,y)=>x.map((v,i)=>v+(y[i]-v)*k);
+  const p=L(sh.from.p,sh.to.p), g=L(sh.from.t,sh.to.t), h=ctx.hero.position;
+  const n=(Math.sin(lt*37.1)+Math.sin(lt*53.7+1.3))*.5, m=(Math.sin(lt*41.3+2)+Math.sin(lt*61.9))*.5;  // 确定性抖动
+  const o=sh.abs?[0,0,0]:[h.x,h.y,h.z]; cam.position.set(o[0]+p[0]+n*sh.shake,o[1]+p[1]+m*sh.shake,o[2]+p[2]);
+  cam.fov=sh.from.fov+(sh.to.fov-sh.from.fov)*k; cam.updateProjectionMatrix();
+  cam.lookAt(o[0]+g[0],o[1]+g[1],o[2]+g[2]);
+  return CFG.acts.indexOf(a)>=0?a.shots.indexOf(sh)+1:0;
+}
+function render(T){
+  const a=actAt(T), lt=T-a.start, u=clamp(lt/(a.end-a.start),0,1);
+  ctx.foes.forEach(f=>f.visible=false); ctx.mooks.forEach(m=>m.visible=false); FX.reset(); ctx.tracers.concat(ctx.missiles,[ctx.beam]).forEach(m=>m.visible=false);
+  ctx.rocks.forEach(r=>{r.position.copy(r.userData.h);r.scale.setScalar(1);}); ctx.hero.rotation.set(0,0,0); ctx.hero.userData.setBlade(0); ctx.mother.visible=false; ctx.hero.visible=true;   // 每帧重置
+  ctx.hero.userData.setForm(kf(CFG.keys.form,T)); ctx.mother.userData.setOpen(kf(CFG.keys.open,T)); ctx.mother.userData.setCharge(kf(CFG.keys.charge,T));
+  ACT[a.fn](warp(T)-a.start,u,ctx,a);
+  const si=applyCamera(a,lt), fx=fxAt(a,T);
+  sky.position.copy(cam.position); FX.sync(cam,rtS.height);
+
+  renderer.setRenderTarget(rtS); renderer.render(scene,cam);
+  const w2=rtA.width,h2=rtA.height,r=fx.bloom.radius;
+  pBright.m.uniforms.tex.value=rtS.texture; pBright.m.uniforms.th.value=fx.bloom.threshold; run(pBright,rtA);
+  pBlur.m.uniforms.tex.value=rtA.texture; pBlur.m.uniforms.dir.value.set(r/w2,0); run(pBlur,rtB);
+  pBlur.m.uniforms.tex.value=rtB.texture; pBlur.m.uniforms.dir.value.set(0,r/h2); run(pBlur,rtA);
+  const U=pMix.m.uniforms; drawText(T); U.tText.value=tTex; U.speed.value=fx.speed; U.fade.value=fx.fade; U.uT.value=Math.floor(T*12)/12;
+  U.bloom.value=fx.bloom.strength; U.rblur.value=fx.radialBlur; U.chroma.value=fx.chroma; U.vig.value=fx.vignette;
+  U.flash.value=fx.flash; U.inv.value=fx.invert; U.flashCol.value.set(fx.flashColor);
+  run(pMix,null);
+  $('hud').textContent=`${a.id} ${a.name} / ${a.en} · 镜头 ${si} · ${fmt(T)}`;
+  chips.forEach((c,i)=>c.classList.toggle('on',CFG.acts[i]===a));
+}
+
+/* ============================ 主时间轴（唯一时钟）：GSAP 时间轴只驱动 S.t ============================ */
+const S={t:0};
+const master=gsap.timeline({paused:true});
+master.to(S,{t:CFG.DURATION,duration:CFG.DURATION,ease:'none'});
+CFG.acts.forEach(a=>master.addLabel(a.id,a.start));
+gsap.ticker.lagSmoothing(0);
+
+/* ============================ BGM（程序合成：离线渲染一次，再随主时间轴播放；160 BPM、D 小调） ============================ */
+const BGM=(()=>{
+  const SR=44100,B=60/CFG.audio.bpm,bar=B*4,mf=m=>440*2**((m-69)/12);
+  const CH={Dm:[50,57,62,65],Bb:[46,53,58,62],C:[48,55,60,64],Gm:[43,50,55,58],A:[45,52,57,61]},RT={Dm:38,Bb:34,C:36,Gm:31,A:33};
+  let buf=null,ac=null,spk=null,gain=null,dest=null,src=null,t0=0,off=0,muted=false;
+  async function build(){
+    const o=new OfflineAudioContext(2,SR*CFG.DURATION,SR),out=o.createGain(),comp=o.createDynamicsCompressor(),wet=o.createGain(),cvb=o.createConvolver();
+    out.gain.setValueAtTime(.9,0);out.gain.setValueAtTime(.9,58.5);out.gain.linearRampToValueAtTime(0,60);
+    comp.threshold.value=-14;comp.ratio.value=6;wet.gain.value=.22;
+    const ir=o.createBuffer(2,SR*2,SR);for(let c=0;c<2;c++){const d=ir.getChannelData(c),Q=rng(5+c);for(let i=0;i<d.length;i++)d[i]=(Q()*2-1)*Math.pow(1-i/d.length,3);}
+    cvb.buffer=ir;out.connect(comp);out.connect(cvb);cvb.connect(wet);wet.connect(comp);comp.connect(o.destination);
+    const nb=o.createBuffer(1,SR*3,SR),nd=nb.getChannelData(0),R=rng(99);for(let i=0;i<nd.length;i++)nd[i]=R()*2-1;
+    const env=(g,t,a,d,v,r)=>{g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+a);g.gain.setValueAtTime(v,t+d);g.gain.linearRampToValueAtTime(0,t+d+r);};
+    const tone=(ty,f,t,d,v,{lp=2000,a=.01,r=.08,det=0,to}={})=>{const os=o.createOscillator(),fl=o.createBiquadFilter(),g=o.createGain();os.type=ty;os.frequency.setValueAtTime(f,t);if(to)os.frequency.linearRampToValueAtTime(to,t+d);os.detune.value=det;fl.type='lowpass';fl.frequency.value=lp;env(g,t,a,d,v,r);os.connect(fl);fl.connect(g);g.connect(out);os.start(t);os.stop(t+d+r+.05);};
+    const nz=(t,d,v,ty,f,{q=1,to,a=.002}={})=>{const s=o.createBufferSource(),fl=o.createBiquadFilter(),g=o.createGain();s.buffer=nb;fl.type=ty;fl.frequency.setValueAtTime(f,t);if(to)fl.frequency.exponentialRampToValueAtTime(to,t+d);fl.Q.value=q;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+a);g.gain.exponentialRampToValueAtTime(.0001,t+d);s.connect(fl);fl.connect(g);g.connect(out);s.start(t,R()*.3);s.stop(t+d+.05);};
+    const kick=(t,v=.7)=>{const os=o.createOscillator(),g=o.createGain();os.frequency.setValueAtTime(160,t);os.frequency.exponentialRampToValueAtTime(42,t+.14);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+.35);os.connect(g);g.connect(out);os.start(t);os.stop(t+.4);};
+    const snare=(t,v=.35)=>{nz(t,.18,v,'bandpass',1900,{q:.8});tone('triangle',190,t,.06,v*.6,{lp:1500,a:.001,r:.06});};
+    const hat=(t,v=.08,op)=>nz(t,op?.16:.04,v,'highpass',7500);
+    const boom=(t,v=.9)=>{tone('sine',70,t,.2,v,{a:.002,r:2.2,to:28});nz(t,2.2,v*.5,'lowpass',900,{to:60});};
+    const crash=(t,v=.3)=>nz(t,2.6,v,'highpass',3500);
+    const riser=(t1,t2,v=.25)=>nz(t1,t2-t1,v,'bandpass',300,{q:2,to:7000,a:t2-t1-.05});
+    const pad=(ch,t,d,v=.05,lp=900)=>CH[ch].forEach(m=>{tone('sawtooth',mf(m),t,d,v,{lp,a:.5,r:.8,det:-7});tone('sawtooth',mf(m),t,d,v,{lp,a:.5,r:.8,det:7});});
+    const bass=(ch,t,v=.22)=>[0,0,12,0,0,0,12,7].forEach((x,i)=>tone('sawtooth',mf(RT[ch]+x),t+i*B/2,B*.42,v,{lp:520,a:.004,r:.05}));
+    const lead=(t,sh=0,v=.08)=>[0,3,7,5,3,0,2,-2,0,3,7,10,8,7,3,5].forEach((x,i)=>{const f=mf(74+x+sh),q=t+i*B/2;tone('sawtooth',f,q,B*.45,v,{lp:3200,r:.06});tone('square',f,q,B*.45,v*.5,{lp:2400,r:.06,det:5});});
+    const groove=(t,bars)=>{for(let b=0;b<bars;b++)for(let i=0;i<4;i++){const q=t+(b*4+i)*B;kick(q);if(i%2)snare(q);hat(q,.07);hat(q+B/2,.09,i===3);}};
+    const roll=(t1,t2,v=.3)=>{let t=t1,s=B/2;while(t<t2){snare(t,v*(.4+.6*(t-t1)/(t2-t1)));t+=s;s=Math.max(B/8,s*.88);}};
+    // A1 突围 0–12：低频持续音 + 脉冲，6s 鼓点渐入，9–10.5s 收束，10.5s 起升调
+    tone('sawtooth',mf(26),0,12,.12,{lp:300,a:3,r:.5});tone('sawtooth',mf(33),0,12,.06,{lp:260,a:4,r:.5});
+    for(let t=0;t<6;t+=B/2)tone('square',mf(38),t,B*.3,.035+.03*(t/6),{lp:400+t*150,r:.04});
+    pad('Dm',6,6,.04,800);groove(6,2);kick(9,.5);kick(9.2,.35);kick(9.75,.5);kick(9.95,.35);
+    riser(10.5,12,.3);roll(10.5,12,.35);boom(12,.9);crash(12,.35);
+    // A2 反击 12–27：全编制，击破前一拍过门、击破点重击
+    for(let i=0;i<10;i++){const ch=['Dm','Dm','Bb','C'][i%4],t=12+i*bar;pad(ch,t,bar,.045,1200);bass(ch,t);}
+    groove(12,10);[1,3,5,7].forEach(i=>lead(12+i*bar));
+    [16.5,21,25.5].forEach(k=>{roll(k-B*1.5,k,.3);boom(k,.8);crash(k,.3);});
+    // A3 母舰 27–42：低沉铜管感铺底，34.5–36s 蓄力，36s 重击，39.75–40.5s 静一拍
+    ['Dm','Dm','Bb','Bb','Gm','Gm','A','A','Dm','Dm'].forEach((ch,i)=>{const t=27+i*bar,d=i===8?.75:bar;pad(ch,t,d,.06,700);tone('sawtooth',mf(RT[ch]),t,d-.05,.2,{lp:260,a:.4});if(i<7){kick(t,.55);kick(t+B*2,.45);}});
+    for(let t=30;t<34.5;t+=B/2)hat(t,.04);
+    riser(34.5,36,.3);boom(36,.9);crash(36,.35);kick(39,.5);kick(39.2,.35);
+    pad('Dm',40.5,1.5,.08,2500);kick(40.5,.7);roll(40.5,42,.35);
+    // A4 必杀 42–53：心跳→升调琤音→贯穿重拍（48s）→回落→半速→终爆
+    for(let t=42;t<43.5;t+=.75){kick(t,.5);kick(t+.2,.35);}
+    const SC=[0,3,5,7,10];let n=0;
+    for(let t=43.5;t<46.5;t+=B/4,n++){const k=(t-43.5)/3;tone('sawtooth',mf(50+SC[n%5]+12*Math.floor(n/10)),t,B*.2,.03+.09*k,{lp:2500,r:.04});}
+    for(let t=46.5;t<48;t+=B/8,n++)tone('sawtooth',mf(62+SC[n%5]+12*(Math.floor(n/5)%2)),t,B*.1,.12,{lp:3500,r:.03});
+    riser(43.5,48,.25);pad('Dm',45,3,.07,1800);roll(46.5,48,.4);
+    boom(48,1);crash(48,.45);kick(48,.9);pad('Dm',48,1.5,.09,3000);
+    groove(49.5,1);bass('Dm',49.5,.25);lead(49.5,0,.1);
+    pad('Dm',51,1.5,.08,2200);kick(51,.7);riser(52.2,53,.3);boom(53,.8);crash(53,.4);
+    // A5 定格 53–60：铺底 + 57s 起单旋律，最后长音淡出
+    pad('Dm',53,4,.06,1000);pad('Bb',57,3.5,.06,900);
+    [[57,74],[57.75,77],[58.5,81],[59.25,86]].forEach(([t,m],i)=>tone('sawtooth',mf(m),t,i<3?.7:1.2,.07,{lp:2200,a:.02,r:.8}));
+    buf=await o.startRendering();
+  }
+  const api={ready:false,build,
+    ensure(){if(ac)return;ac=new (window.AudioContext||window.webkitAudioContext)();gain=ac.createGain();gain.gain.value=CFG.audio.volume;spk=ac.createGain();spk.gain.value=muted?0:1;
+      dest=ac.createMediaStreamDestination();gain.connect(spk);spk.connect(ac.destination);gain.connect(dest);},
+    play(at){if(!buf)return;api.ensure();ac.resume();api.stop();src=ac.createBufferSource();src.buffer=buf;src.connect(gain);t0=ac.currentTime;off=at;src.start(0,at);},
+    stop(){if(src){try{src.stop();}catch(e){}src=null;}},
+    pos(){return src?off+ac.currentTime-t0:-1;},
+    get on(){return !!src;},
+    mute(m){muted=m;if(spk)spk.gain.value=m?0:1;},
+    stream(){api.ensure();return dest.stream;}};
+  build().then(()=>{api.ready=true;}).catch(e=>console.error('BGM',e));
+  return api;
+})();
+
+/* ============================ 播放器 UI ============================ */
+const chips=CFG.acts.map(a=>{const b=document.createElement('button');b.className='chip';b.textContent=`${a.id} ${a.name} ${a.en}`;
+  b.onclick=()=>{master.pause();master.time(a.start);dirty=true;};$('chips').appendChild(b);return b;});
+CFG.acts.forEach(a=>{if(a.start>0){const i=document.createElement('i');i.style.left=(a.start/CFG.DURATION*100)+'%';$('ticks').appendChild(i);}});
+
+let rev=false,dragging=false,exporting=false,dl=null;
+const seek=$('seek');
+const togglePlay=()=>{ if(exporting)return;
+  if(master.isActive()){master.pause();return;}
+  if(!rev){if(S.t>=CFG.DURATION-.01)master.time(0);master.play();}
+  else{if(S.t<=.01)master.time(CFG.DURATION);master.reverse();}};
+const replay=()=>{if(exporting)return;rev=false;$('bRev').setAttribute('aria-pressed','false');master.time(0);master.play();};
+$('bPlay').onclick=togglePlay; $('bRe').onclick=replay;
+$('bRev').onclick=e=>{if(exporting)return;rev=!rev;e.currentTarget.setAttribute('aria-pressed',String(rev));
+  if(master.isActive()||!master.paused()&&S.t>0&&S.t<CFG.DURATION){rev?master.reverse():master.play();}};
+seek.addEventListener('pointerdown',()=>dragging=true);
+addEventListener('pointerup',()=>dragging=false);
+seek.addEventListener('input',()=>{if(exporting)return;master.pause();master.time(seek.value/1000*CFG.DURATION);dirty=true;});
+$('qual').onchange=e=>{autoQ=false;setQ(e.target.value);};
+$('bMute').onclick=e=>{const m=e.currentTarget.getAttribute('aria-pressed')!=='true';e.currentTarget.setAttribute('aria-pressed',String(m));BGM.mute(m);};
+$('bar').addEventListener('click',e=>e.target.blur&&e.target.tagName!=='INPUT'&&e.target.blur());
+addEventListener('keydown',e=>{
+  if(['INPUT','SELECT','BUTTON'].includes(e.target.tagName))return;
+  if(e.code==='Space'){e.preventDefault();togglePlay();}
+  else if(e.code==='KeyR')replay();
+  else if(e.code==='KeyH'){const hh=!$('hud').hidden;$('hud').hidden=hh;$('tag').hidden=hh;}
+  else if(e.code==='ArrowRight'||e.code==='ArrowLeft'){master.pause();
+    master.time(clamp(S.t+(e.code==='ArrowRight'?1:-1)*(e.shiftKey?5:1),0,CFG.DURATION));dirty=true;}
+});
+
+/* ============================ 导出 WebM（实时录制 canvas；发布页通过 downloads 能力保存） ============================ */
+async function exportVideo(){
+  if(!dl||exporting||typeof MediaRecorder==='undefined')return;
+  const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m));
+  const prevQ=CFG.quality; setQ('high'); rev=false; master.pause(); master.time(0); render(0);
+  const rec=new MediaRecorder(new MediaStream([...cv.captureStream(CFG.FPS).getVideoTracks(),...(BGM.ready?BGM.stream().getAudioTracks():[])]),{mimeType:mime,videoBitsPerSecond:CFG.exportBitrate});
+  const chunks=[]; rec.ondataavailable=e=>e.data.size&&chunks.push(e.data);
+  const stopped=new Promise(r=>rec.onstop=r);
+  exporting=true; $('bExp').disabled=true; rec.start(250); master.play();
+  await new Promise(r=>{const f=()=>{if(S.t>=CFG.DURATION-.001){gsap.ticker.remove(f);r();}};gsap.ticker.add(f);});
+  await new Promise(r=>setTimeout(r,300)); rec.stop(); await stopped;
+  exporting=false; $('bExp').disabled=false; setQ(prevQ);
+  try{await dl.save({filename:'shoko-space-battle.webm',data:new Blob(chunks,{type:'video/webm'})});}
+  catch(e){if(e&&e.code!=='declined')console.error(e);}
+}
+$('bExp').onclick=exportVideo;
+if(window.claude&&window.claude.use){window.claude.use('downloads').then(d=>{dl=d;if(d)$('bExp').hidden=false;}).catch(()=>{});}
+
+// 性能保护：连续两个 2 秒窗口平均帧率低于 40 时自动降到 720p（手动改画质后不再自动调整）
+let autoQ=true,fN=0,fT=performance.now(),lowN=0,qNote='';
+function perfTick(){fN++;const n=performance.now();if(n-fT<2000)return;const fps=fN*1000/(n-fT);fN=0;fT=n;
+  if(!master.isActive()||document.visibilityState!=='visible'){lowN=0;return;}
+  lowN=fps<40?lowN+1:0;
+  if(autoQ&&!exporting&&lowN>=2&&CFG.quality==='high'){setQ('mid');autoQ=false;qNote=' · 帧率偏低，已自动切到 720p';}}
+
+/* ============================ 主循环：状态只来自 S.t，重复渲染同一时刻结果一致 ============================ */
+gsap.ticker.add(()=>{
+  if(S.t!==last||dirty){render(S.t);last=S.t;dirty=false;}
+  if(!dragging)seek.value=S.t/CFG.DURATION*1000;
+  perfTick();
+  const wantA=BGM.ready&&master.isActive()&&!rev&&!dragging;   // BGM 只在正向播放时发声；拖动、暂停、倒放静音，偶差超 0.2s 自动重对齐
+  if(wantA&&(!BGM.on||Math.abs(BGM.pos()-S.t)>.2))BGM.play(S.t); else if(!wantA&&BGM.on)BGM.stop();
+  $('clock').textContent=fmt(S.t)+' / '+fmt(CFG.DURATION)+(BGM.ready?'':' · BGM 合成中…')+qNote;
+  $('bPlay').textContent=exporting?'录制中…':master.isActive()?'暂停':'播放';
+});
+setQ(CFG.quality);
+</script>
+</body>
+</html>

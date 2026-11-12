@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>曙光号 · DAWN BREAKER — 同一场空战，两种拍法</title>
+<style>
+  :root{
+    --bg:#05070e; --panel:#0b101d; --line:#1c2a4a;
+    --ink:#dfe8f6; --dim:#7d8db0; --cyan:#7fe3ff; --orange:#ffb35c; --blue:#2e63e7;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:radial-gradient(120% 70% at 50% 0%, #0a1224 0%, var(--bg) 60%);
+    color:var(--ink); font-family:"PingFang SC","Hiragino Sans","Microsoft YaHei",system-ui,sans-serif;
+    min-height:100vh; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:56px 20px 80px}
+  header{text-align:center;margin-bottom:40px}
+  header .eyebrow{font-size:12px;letter-spacing:.55em;color:var(--dim);margin-bottom:14px}
+  header h1{font-size:clamp(30px,6vw,52px);font-weight:900;letter-spacing:.18em}
+  header h1 b{color:var(--cyan);text-shadow:0 0 24px rgba(127,227,255,.5)}
+  header .sub{margin-top:14px;font-size:14px;color:var(--dim);letter-spacing:.24em}
+  .vs{display:flex;align-items:center;justify-content:center;gap:14px;margin:26px 0 8px;flex-wrap:wrap}
+  .vs .pill{font-size:13px;font-weight:700;letter-spacing:.18em;padding:7px 18px;border-radius:999px;border:1px solid}
+  .pill.a{color:var(--cyan);border-color:rgba(127,227,255,.5);background:rgba(127,227,255,.08)}
+  .pill.b{color:var(--orange);border-color:rgba(255,179,92,.5);background:rgba(255,179,92,.08)}
+  .vs .x{color:var(--dim);font-weight:900}
+  video{
+    width:100%;border-radius:10px;border:1px solid var(--line);
+    box-shadow:0 0 80px rgba(46,99,231,.18),0 20px 60px rgba(0,0,0,.6);
+    display:block;background:#000;
+  }
+  .vnote{text-align:center;color:var(--dim);font-size:12px;letter-spacing:.2em;margin-top:12px}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:44px}
+  @media (max-width:760px){.cards{grid-template-columns:1fr}}
+  .card{
+    background:linear-gradient(180deg,var(--panel),#080d18);
+    border:1px solid var(--line);border-radius:14px;padding:26px 26px 22px;position:relative;overflow:hidden;
+  }
+  .card::before{content:"";position:absolute;inset:0 0 auto 0;height:3px}
+  .card.a::before{background:linear-gradient(90deg,var(--cyan),transparent)}
+  .card.b::before{background:linear-gradient(90deg,var(--orange),transparent)}
+  .card .tag{font-size:11px;letter-spacing:.4em;color:var(--dim)}
+  .card.a .tag{color:var(--cyan)} .card.b .tag{color:var(--orange)}
+  .card h2{font-size:22px;font-weight:900;letter-spacing:.1em;margin:10px 0 2px}
+  .card .en{font-size:11px;letter-spacing:.3em;color:var(--dim)}
+  .card ul{list-style:none;margin:16px 0 20px;display:grid;gap:8px}
+  .card li{font-size:13px;color:#b9c6de;line-height:1.5;padding-left:16px;position:relative}
+  .card li::before{content:"▸";position:absolute;left:0;top:0;color:var(--dim)}
+  .card a{
+    display:inline-block;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:.14em;
+    padding:11px 22px;border-radius:9px;transition:all .18s;
+  }
+  .card.a a{color:#04121c;background:linear-gradient(135deg,var(--cyan),#4aa8d8)}
+  .card.b a{color:#1c0e02;background:linear-gradient(135deg,var(--orange),#e08a3c)}
+  .card a:hover{transform:translateY(-1px);box-shadow:0 6px 22px rgba(0,0,0,.45)}
+  footer{margin-top:56px;text-align:center;color:#43537a;font-size:12px;letter-spacing:.18em;line-height:2}
+  footer .sep{margin:0 10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">SINGLE-FILE SPACE BATTLE</div>
+    <h1>曙<b>光</b>号</h1>
+    <div class="sub">同一场宇宙空战 · 两种拍法 · ONE DOGFIGHT, TWO CUTS</div>
+    <div class="vs">
+      <span class="pill a">A · 赛璐璐 TOON</span><span class="x">VS</span><span class="pill b">B · 写实 MECHA</span>
+    </div>
+  </header>
+
+  <video controls preload="metadata" src="compare/shuguang-compare.mp4"></video>
+  <div class="vnote">60 秒同步对比 · 音频按幕在 A/B 间交替（左下角标指示）</div>
+
+  <div class="cards">
+    <div class="card a">
+      <div class="tag">VERSION A</div>
+      <h2>赛璐璐动画版</h2>
+      <div class="en">TOON ANIME CUT · 60s</div>
+      <ul>
+        <li>三段着色 + 反壳轮廓线的日式赛璐璐渲染</li>
+        <li>战机 ⇄ 人形双形态、光刃必杀「曙光断」</li>
+        <li>程序化合成 160 BPM 电子乐（离线烘焙整轨）</li>
+        <li>星云天穹 / 恒星耀斑 / 命中顿帧与冲击帧</li>
+        <li>日文文案 · 支持进度拖动与倒放</li>
+      </ul>
+      <a href="toon.html">▶ 打开互动版</a>
+    </div>
+    <div class="card b">
+      <div class="tag">VERSION B</div>
+      <h2>写实机甲版</h2>
+      <div class="en">MECHA FILM CUT · 60s</div>
+      <ul>
+        <li>PBR 材质 + 程序化地球 / 大气辉光 / 云层</li>
+        <li>240 颗实例化小行星带绕行 · 人形机甲近战</li>
+        <li>解析式导弹 / 弹道 / 爆炸冲击波（可 seek）</li>
+        <li>132 BPM 配乐 + 激光/爆炸拟真音效</li>
+        <li>中文文案 · 支持 #t=秒 深链定位</li>
+      </ul>
+      <a href="mecha.html">▶ 打开互动版</a>
+    </div>
+  </div>
+
+  <footer>
+    Three.js r128 <span class="sep">·</span> GSAP 3 <span class="sep">·</span> WebAudio 程序化音频 <span class="sep">·</span> 单文件 · 零构建<br>
+    画面状态全部为 f(t) 纯函数，可拖动、可倒放、可逐帧定位
+  </footer>
+</div>
+</body>
+</html>
